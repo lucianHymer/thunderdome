@@ -59,9 +59,16 @@ User submits challenge (+ optional repo context)
     Each evaluates all gladiator responses
     from a different angle
                 ↓
-       Synthesizes verdict
+       Synthesizes Verdict
                 ↓
-     Editor (you) decrees
+            Consul
+    (interactive dialogue)
+                ↓
+    Editor (you) discusses results with Consul
+    "Combine these two", "Simplify this", "Run another trial"
+                ↓
+         Editor Decrees
+    (merge branch, synthesize, export, iterate, etc.)
 ```
 
 ### The Lanista
@@ -308,6 +315,62 @@ To manage costs and keep battles focused:
 
 The Lanista can be instructed to use fewer for simple challenges or more for complex ones, but these are the guardrails.
 
+### The Decree (Interactive)
+
+After judges deliver the verdict, you don't just see results - you enter a **dialogue** to decide what to do with them. This is the Decree phase.
+
+A Claude instance (the **Consul**?) has access to:
+- The original challenge
+- All gladiator responses
+- All judge evaluations
+- The verdict
+- The repo (if applicable)
+- All the branches/worktrees
+
+You can chat with it to decide next steps:
+
+**Example interactions:**
+
+```
+You: "I like the MEV Searcher's approach but the Math Auditor found 
+     some edge cases they missed. Can we combine them?"
+
+Consul: "I can synthesize a combined approach. The MEV Searcher's 
+        architecture with the Math Auditor's edge case handling 
+        would look like... [proposal]. Want me to create a new 
+        branch with this merged approach?"
+```
+
+```
+You: "The Protocol Purist won but their solution is too complex. 
+     Can you simplify it while keeping the core insight?"
+
+Consul: "The core insight is the queue-based liquidation delay. 
+        Here's a simplified version that drops the priority 
+        system but keeps the safety guarantees... [code]. 
+        Should I push this to a new branch?"
+```
+
+```
+You: "Actually none of these are quite right. Based on all this, 
+     I think we need to approach it differently. What if we..."
+
+Consul: "Interesting. Based on what the gladiators found, that 
+        approach would need to handle [X, Y, Z]. Want me to 
+        draft a new solution incorporating your idea with their 
+        findings?"
+```
+
+**Decree actions:**
+- **Merge a branch**: "Merge the Math Auditor's branch to main"
+- **Synthesize**: "Combine these two approaches into a new branch"
+- **Simplify**: "Take this solution but make it simpler"
+- **Iterate**: "None of these - let's use these findings to run a new trial"
+- **Export**: "Give me a report I can share with the team"
+- **Just discuss**: "Help me understand the tradeoffs here"
+
+The Decree phase is open-ended. You're not forced to pick a winner - you can use the battle results however you want.
+
 ### Terminology Reference
 
 | Concept | Term | Description |
@@ -318,7 +381,9 @@ The Lanista can be instructed to use fewer for simple challenges or more for com
 | Competing LLMs | **Gladiators** | Claude instances with different perspectives |
 | Evaluators | **Judges** | Claude instances that score gladiators |
 | A competition | **Trial** or **Bout** | One challenge with its gladiators and judges |
-| Final decision | **Verdict** | The synthesized result |
+| Synthesized result | **Verdict** | The judges' conclusion |
+| Post-verdict advisor | **Consul** | AI you dialogue with to decide next steps |
+| Your decision | **Decree** | What you decide to do with the results |
 | User | **Editor** | You—the one who gives the final decree |
 
 ---
@@ -415,7 +480,7 @@ trials:
   - repo_url (nullable)
   - challenge_prompt
   - trial_type (ideation | repo_aware | code_battle)
-  - status (pending | lanista_designing | battling | arbiter_designing | judging | complete)
+  - status (pending | lanista_designing | battling | arbiter_designing | judging | decree | complete)
   - lanista_plan (JSON - gladiators designed)
   - arbiter_plan (JSON - judges designed, after gladiators finish)
   - created_at
@@ -452,6 +517,15 @@ verdicts:
   - summary
   - winner_gladiator_id (nullable)
   - reasoning
+  - created_at
+
+-- Decrees (Editor's final decisions)
+decrees:
+  - id
+  - trial_id
+  - action_type (merge | synthesize | export | iterate | custom)
+  - action_details (JSON - what was done)
+  - consul_conversation (JSON - the dialogue that led here)
   - created_at
 ```
 
@@ -573,7 +647,43 @@ After gladiators finish:
 │  ├─ Pragmatist Judge    [Expand]                        │
 │  └─ Security Judge      [Expand]                        │
 ├─────────────────────────────────────────────────────────┤
-│  [Export Report]  [New Trial]  [Re-run with Tweaks]     │
+│  [Enter Decree Phase]  [Export Report]  [New Trial]     │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Decree Phase (Interactive Dialogue)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  👑 DECREE PHASE                                         │
+│  Chat with the Consul to decide what to do              │
+├─────────────────────────────────────────────────────────┤
+│  Consul: "The Protocol Purist won, but I noticed the    │
+│          Gas Optimizer's approach could reduce costs    │
+│          by ~40%. The Math Auditor found edge cases     │
+│          both others missed. How would you like to      │
+│          proceed?"                                      │
+│                                                         │
+│  You: "Can we combine Protocol Purist's safety with     │
+│        the Gas Optimizer's efficiency?"                 │
+│                                                         │
+│  Consul: "Yes - the key insight from Gas Optimizer is   │
+│          batching liquidations. We can apply that to    │
+│          Protocol Purist's queue system. Here's what    │
+│          that would look like...                        │
+│                                                         │
+│          [Shows synthesized approach]                   │
+│                                                         │
+│          Want me to create a new branch with this?"     │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ > Maybe, but first check if Math Auditor's edge │    │
+│  │   cases apply to this combined approach...      │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                         [Send]          │
+├─────────────────────────────────────────────────────────┤
+│  Quick actions:                                         │
+│  [Merge Winner] [Synthesize All] [Export] [New Trial]   │
 └─────────────────────────────────────────────────────────┘
 ```
 
