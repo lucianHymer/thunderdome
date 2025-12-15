@@ -199,8 +199,8 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[80vh] !flex !flex-col overflow-hidden">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col gap-4">
+        <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="text-2xl">⚖️</span>
             <span>Consul</span>
@@ -209,12 +209,13 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
         </DialogHeader>
 
         {/* Verdict Summary */}
-        <div className="flex-shrink-0 bg-purple-950/30 border border-purple-500/30 rounded-lg p-3 text-sm text-foreground">
-          <strong className="text-purple-400">Verdict:</strong> {verdict.summary}
+        <div className="bg-purple-950/30 border border-purple-500/30 rounded-lg p-3 text-sm text-foreground">
+          <strong className="text-purple-400">Verdict:</strong>{" "}
+          {verdict.summary.split(/\n\n##/)[0].trim()}
         </div>
 
         {/* Messages */}
-        <ScrollArea className="flex-1 min-h-0 pr-4" ref={scrollRef}>
+        <ScrollArea className="flex-1 min-h-[200px] max-h-[400px] pr-4" ref={scrollRef}>
           <div className="space-y-4">
             {messages.map((message, index) => (
               <div
@@ -253,7 +254,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
 
         {/* Quick Actions */}
         {!isStreaming && messages.length > 0 && (
-          <div className="flex-shrink-0 flex flex-wrap gap-2 py-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
               variant="outline"
@@ -282,7 +283,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
         )}
 
         {/* Input */}
-        <div className="flex-shrink-0 flex gap-2 pt-2 border-t">
+        <div className="flex gap-2 pt-2 border-t border-border">
           <Input
             ref={inputRef}
             value={input}
