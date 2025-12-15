@@ -90,7 +90,7 @@ export async function runArbiter(
       {
         model: MODELS.OPUS, // Use Opus for the Arbiter - needs strong analytical reasoning
         allowedTools: [], // Arbiter doesn't need tools, just reasoning
-        maxTurns: 1, // Single-turn structured output
+        maxTurns: 5, // Allow a few turns for structured output
         systemPrompt: ARBITER_SYSTEM_PROMPT,
         permissionMode: "bypassPermissions",
       },

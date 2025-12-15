@@ -88,7 +88,7 @@ async function runSingleJudge(
       {
         model: judge.model,
         allowedTools: [], // Judges don't need tools, just reasoning
-        maxTurns: 1, // Single-turn structured output
+        maxTurns: 5, // Allow a few turns for structured output
         systemPrompt,
         permissionMode: "bypassPermissions",
       },

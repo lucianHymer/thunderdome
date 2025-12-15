@@ -118,8 +118,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             prompt: conversationPrompt,
             options: {
               systemPrompt: `${systemPrompt}\n\n# Trial Context\n${trialContext}`,
-              model: "claude-sonnet-4",
-              maxTurns: 1,
+              model: "sonnet",
+              maxTurns: 5,
               allowedTools: [], // No tools for Consul
             },
           });
