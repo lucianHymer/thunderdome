@@ -101,7 +101,7 @@ function extractCostInfo(result: any): CostInfo {
  *
  * @param prompt - The prompt to send to the agent
  * @param config - Agent configuration
- * @param oauthToken - OAuth token for authentication (uses ANTHROPIC_API_KEY env var if not provided)
+ * @param oauthToken - OAuth token for authentication
  * @yields StreamEvent objects as they occur
  * @returns AgentResult with final outcome
  *
@@ -153,7 +153,6 @@ export async function* runAgent(
   };
 
   // Set OAuth token if provided (for Claude Code integration)
-  // Otherwise falls back to ANTHROPIC_API_KEY env var
   const originalToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
   if (oauthToken) {
     process.env.CLAUDE_CODE_OAUTH_TOKEN = oauthToken;

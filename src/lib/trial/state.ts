@@ -28,15 +28,17 @@ export const STATE_MAPPING = {
 };
 
 // Valid state transitions
+// Note: Each state can transition to itself (no-op for resume scenarios)
+// Failed state can recover to any earlier state for resume functionality
 const STATE_TRANSITIONS: Record<string, string[]> = {
-  pending: ["lanista_designing", "failed"],
-  lanista_designing: ["battling", "failed"],
-  battling: ["arbiter_designing", "failed"],
-  arbiter_designing: ["judging", "failed"],
-  judging: ["decree", "failed"],
-  decree: ["complete", "failed"],
+  pending: ["pending", "lanista_designing", "failed"],
+  lanista_designing: ["lanista_designing", "battling", "failed"],
+  battling: ["battling", "arbiter_designing", "failed"],
+  arbiter_designing: ["arbiter_designing", "judging", "failed"],
+  judging: ["judging", "decree", "failed"],
+  decree: ["decree", "complete", "failed"],
   complete: [],
-  failed: [],
+  failed: ["lanista_designing", "battling", "arbiter_designing", "judging"],
 };
 
 export type TrialState = keyof typeof STATE_TRANSITIONS;
@@ -88,6 +90,11 @@ export async function transitionTrialState(
   // Validate transition
   if (!isValidTransition(currentState, nextState)) {
     throw new Error(`Invalid state transition: ${currentState} → ${nextState}`);
+  }
+
+  // Same-state transition is a no-op (for resume scenarios)
+  if (currentState === nextState) {
+    return;
   }
 
   // Get the database status for the next state

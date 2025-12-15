@@ -1,7 +1,7 @@
 # Knowledge Capture Session - 2025-12-14
 
 ### [22:43] [auth] Claude Agent SDK authentication
-**Details**: The Claude Agent SDK (@anthropic-ai/claude-agent-sdk) can authenticate using CLAUDE_CODE_OAUTH_TOKEN instead of ANTHROPIC_API_KEY. Generate the token with `claude setup-token` command from Claude Code CLI. Set it as: export CLAUDE_CODE_OAUTH_TOKEN="your-token-here"
+**Details**: The Claude Agent SDK (@anthropic-ai/claude-agent-sdk) authenticates using CLAUDE_CODE_OAUTH_TOKEN. Generate the token with `claude setup-token` command from Claude Code CLI. Users store their token in settings, which is encrypted and passed to agents at runtime.
 **Files**: issues/issue-0-infrastructure.md
 ---
 

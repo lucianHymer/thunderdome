@@ -94,22 +94,18 @@ export function validateClaudeToken(token: string): boolean {
 }
 
 /**
- * Gets the current authentication token from environment
- *
- * Checks in order:
- * 1. CLAUDE_CODE_OAUTH_TOKEN
- * 2. ANTHROPIC_API_KEY
+ * Gets the current authentication token from environment (CLAUDE_CODE_OAUTH_TOKEN)
  *
  * @returns The token, or undefined if not found
  */
 export function getAuthToken(): string | undefined {
-  return process.env.CLAUDE_CODE_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY;
+  return process.env.CLAUDE_CODE_OAUTH_TOKEN;
 }
 
 /**
  * Checks if authentication is configured
  *
- * @returns True if either CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY is set
+ * @returns True if CLAUDE_CODE_OAUTH_TOKEN is set
  */
 export function isAuthConfigured(): boolean {
   const token = getAuthToken();

@@ -63,9 +63,6 @@ NEXTAUTH_URL=http://localhost:3000
 # Encryption (for storing user Claude tokens)
 # Generate with: openssl rand -hex 32
 ENCRYPTION_KEY=your_encryption_key_64_chars
-
-# Optional: Claude API key for system operations
-ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
 ### Getting Credentials
