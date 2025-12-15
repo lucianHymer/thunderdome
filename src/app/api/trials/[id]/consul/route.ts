@@ -125,9 +125,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           for await (const event of agentStream) {
             console.log("[Consul] Event type:", event.type);
 
-            // Handle assistant messages - this is where the text content is
+            // Handle assistant messages - extract text from the message object
             if (event.type === "assistant") {
-              const text = event.content as string;
+              const msg = event.content as any;
+              // The content is a message object with content array
+              const textContent = msg?.content?.find((c: any) => c.type === "text");
+              const text = textContent?.text;
               if (text) {
                 fullResponse += text;
                 const data = JSON.stringify({
