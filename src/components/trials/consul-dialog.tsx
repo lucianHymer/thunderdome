@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Verdict {
@@ -46,7 +46,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
   const [isStreaming, setIsStreaming] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const initializeConversation = async () => {
     setIsStreaming(true);
@@ -90,9 +90,12 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
 
     let accumulatedContent = "";
 
-    // Add placeholder message for streaming
-    const placeholderIndex = messages.length;
-    setMessages((prev) => [...prev, { role: "consul", content: "" }]);
+    // Add placeholder message for streaming and get the actual index
+    let placeholderIndex = -1;
+    setMessages((prev) => {
+      placeholderIndex = prev.length;
+      return [...prev, { role: "consul", content: "" }];
+    });
 
     try {
       while (true) {
@@ -111,10 +114,14 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
               const parsed = JSON.parse(data);
               if (parsed.type === "content") {
                 accumulatedContent += parsed.text;
-                // Update the placeholder message
+                // Update the placeholder message at the correct index
                 setMessages((prev) => {
                   const newMessages = [...prev];
-                  newMessages[placeholderIndex] = {
+                  // Use the last consul message if index is somehow wrong
+                  const idx = placeholderIndex >= 0 && placeholderIndex < prev.length
+                    ? placeholderIndex
+                    : prev.length - 1;
+                  newMessages[idx] = {
                     role: "consul",
                     content: accumulatedContent,
                   };
@@ -187,8 +194,21 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
 
   const handleQuickAction = (action: string) => {
     setInput(action);
-    setTimeout(() => inputRef.current?.focus(), 0);
+    setTimeout(() => textareaRef.current?.focus(), 0);
   };
+
+  // Auto-resize textarea
+  const adjustTextareaHeight = () => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = Math.min(textarea.scrollHeight, 150) + "px";
+    }
+  };
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [input]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -215,7 +235,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
         </div>
 
         {/* Messages */}
-        <ScrollArea className="flex-1 min-h-[200px] max-h-[400px] pr-4" ref={scrollRef}>
+        <ScrollArea className="flex-1 min-h-[200px] max-h-[400px] pr-4" viewportRef={scrollRef}>
           <div className="space-y-4">
             {messages.map((message, index) => (
               <div
@@ -283,17 +303,18 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
         )}
 
         {/* Input */}
-        <div className="flex gap-2 pt-2 border-t border-border">
-          <Input
-            ref={inputRef}
+        <div className="flex gap-2 pt-2 border-t border-border items-end">
+          <Textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask the Consul for guidance..."
             disabled={isStreaming}
-            className="flex-1"
+            className="flex-1 min-h-[40px] max-h-[150px] resize-none"
+            rows={1}
           />
-          <Button onClick={sendMessage} disabled={!input.trim() || isStreaming} size="icon">
+          <Button onClick={sendMessage} disabled={!input.trim() || isStreaming} size="icon" className="shrink-0">
             {isStreaming ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
