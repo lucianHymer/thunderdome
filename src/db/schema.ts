@@ -1,17 +1,67 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
-import { sql } from 'drizzle-orm'
+import { sqliteTable, text, integer, primaryKey } from 'drizzle-orm/sqlite-core'
 
-// Users table - stores GitHub OAuth user info
+// Users table - stores GitHub OAuth user info with NextAuth support
 export const users = sqliteTable('users', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  githubId: text('github_id').notNull().unique(),
-  githubUsername: text('github_username').notNull(),
+  name: text('name'),
+  email: text('email').unique(),
+  emailVerified: integer('email_verified', { mode: 'timestamp_ms' }),
+  image: text('image'),
+  githubId: text('github_id').unique(),
+  githubUsername: text('github_username'),
   githubAccessToken: text('github_access_token'),
-  claudeOauthToken: text('claude_oauth_token'),
+  claudeToken: text('claude_token'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .$defaultFn(() => new Date())
     .notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .$defaultFn(() => new Date()),
 })
+
+// NextAuth: Accounts table
+export const accounts = sqliteTable(
+  'accounts',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    provider: text('provider').notNull(),
+    providerAccountId: text('provider_account_id').notNull(),
+    refresh_token: text('refresh_token'),
+    access_token: text('access_token'),
+    expires_at: integer('expires_at'),
+    token_type: text('token_type'),
+    scope: text('scope'),
+    id_token: text('id_token'),
+    session_state: text('session_state'),
+  },
+  (account) => ({
+    compositePk: primaryKey({ columns: [account.provider, account.providerAccountId] }),
+  })
+)
+
+// NextAuth: Sessions table
+export const sessions = sqliteTable('sessions', {
+  sessionToken: text('session_token').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  expires: integer('expires', { mode: 'timestamp_ms' }).notNull(),
+})
+
+// NextAuth: Verification tokens table
+export const verificationTokens = sqliteTable(
+  'verification_tokens',
+  {
+    identifier: text('identifier').notNull(),
+    token: text('token').notNull(),
+    expires: integer('expires', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (vt) => ({
+    compositePk: primaryKey({ columns: [vt.identifier, vt.token] }),
+  })
+)
 
 // Trials table - represents a single gladiator battle
 export const trials = sqliteTable('trials', {
