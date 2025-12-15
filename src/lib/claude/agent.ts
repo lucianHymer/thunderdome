@@ -5,17 +5,9 @@
 import { type Options, query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentConfig, AgentResult, CostInfo, StreamEvent } from "./types";
 
-// Lazily resolve SDK's bundled CLI path at runtime to avoid build-time analysis
-let _sdkCliPath: string | undefined;
-function getSDKCliPath(): string {
-  if (!_sdkCliPath) {
-    // Dynamic import to avoid SWC parsing the 10MB cli.js at build time
-    const { createRequire } = require("node:module");
-    const req = createRequire(import.meta.url);
-    _sdkCliPath = req.resolve("@anthropic-ai/claude-agent-sdk/cli.js");
-  }
-  return _sdkCliPath as string;
-}
+// Use system-installed Claude CLI
+const CLAUDE_CLI_PATH =
+  process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
 
 /**
  * Processes an SDK message into a StreamEvent
@@ -138,9 +130,7 @@ export async function* runAgent(
   let agentResult: AgentResult | undefined;
 
   // Build SDK options from our config
-  // Use the SDK's bundled CLI
-  const cliPath = getSDKCliPath();
-  console.log("[Agent] Using SDK CLI:", cliPath);
+  console.log("[Agent] Using CLI:", CLAUDE_CLI_PATH);
   console.log("[Agent] Token set:", !!oauthToken);
 
   const options: Options = {
@@ -154,8 +144,8 @@ export async function* runAgent(
     includePartialMessages: config.includePartialMessages,
     maxBudgetUsd: config.maxBudgetUsd,
     ...config.additionalOptions,
-    // Use SDK's bundled CLI
-    pathToClaudeCodeExecutable: cliPath,
+    // Use system Claude CLI
+    pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
     // Enable stderr capture to see actual errors from claude
     stderr: (data: string) => console.error("[Claude stderr]", data),
   };
