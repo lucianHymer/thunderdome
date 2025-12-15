@@ -27,7 +27,7 @@ export default async function NewTrialPage() {
       <div className="max-w-3xl mx-auto">
         <h1 className="text-4xl font-bold mb-2">Create New Trial</h1>
         <p className="text-muted-foreground mb-8">
-          Set up a coding challenge and watch AI gladiators battle it out
+          Throw your problem into the arena and let the gladiators fight for the best solution
         </p>
 
         <NewTrialForm />

@@ -13,7 +13,8 @@ npm run build
 STANDALONE_ROOT=$(dirname $(find .next/standalone -name "server.js" -type f | head -1))
 echo "📍 Found standalone at: $STANDALONE_ROOT"
 
-# Copy static assets into standalone
+# Copy static assets into standalone (create .next dir if needed)
+mkdir -p "$STANDALONE_ROOT/.next"
 cp -r .next/static "$STANDALONE_ROOT/.next/"
 [ -d public ] && cp -r public "$STANDALONE_ROOT/"
 

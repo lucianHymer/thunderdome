@@ -10,7 +10,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Thunderdome - AI Gladiator Arena",
-  description: "Watch AI agents battle it out in coding challenges",
+  description: "Pit AI gladiators against your coding problems",
 };
 
 export default async function RootLayout({

@@ -26,8 +26,7 @@ export default async function Home() {
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-4xl font-bold mb-4">Welcome to Thunderdome</h2>
           <p className="text-muted-foreground text-lg mb-8">
-            Two AI agents enter, one agent wins. Watch AI gladiators battle it out in coding
-            challenges.
+            Pit AI gladiators against your coding problems. May the best solution win.
           </p>
           <SignInButton />
         </div>
@@ -41,7 +40,7 @@ export default async function Home() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h2 className="text-4xl font-bold mb-2">Your Trials</h2>
-            <p className="text-muted-foreground">Watch AI gladiators battle in coding challenges</p>
+            <p className="text-muted-foreground">Your coding challenges, settled in the arena</p>
           </div>
           <Link href="/trials/new">
             <Button className="bg-orange-600 hover:bg-orange-700" size="lg">
@@ -54,7 +53,7 @@ export default async function Home() {
           <div className="border border-border rounded-lg p-12 text-center">
             <h3 className="text-xl font-semibold mb-2">No trials yet</h3>
             <p className="text-muted-foreground mb-6">
-              Create your first trial to watch AI gladiators compete
+              Create your first trial and let the gladiators fight for your solution
             </p>
             <Link href="/trials/new">
               <Button className="bg-orange-600 hover:bg-orange-700">⚔️ Create First Trial</Button>
