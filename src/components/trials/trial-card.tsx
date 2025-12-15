@@ -60,7 +60,7 @@ export function TrialCard({ trial }: TrialCardProps) {
           <div className="flex items-start justify-between gap-4">
             <CardTitle className="text-lg flex items-center gap-2">
               <span>{typeEmoji}</span>
-              <span className="text-muted-foreground text-sm">
+              <span className="text-gray-400 text-sm font-medium">
                 {trial.trialType.toLowerCase()} trial
               </span>
             </CardTitle>
@@ -68,8 +68,8 @@ export function TrialCard({ trial }: TrialCardProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground mb-2">{preview}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-gray-300 mb-2">{preview}</p>
+          <p className="text-xs text-gray-500">
             Created {new Date(trial.createdAt).toLocaleDateString()}
           </p>
         </CardContent>

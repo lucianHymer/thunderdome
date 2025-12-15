@@ -78,7 +78,7 @@ export function ClaudeTokenForm({ hasToken: initialHasToken }: ClaudeTokenFormPr
       {message && (
         <div
           className={`p-3 rounded ${
-            message.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+            message.type === "success" ? "bg-green-900/50 text-green-300 border border-green-700" : "bg-red-900/50 text-red-300 border border-red-700"
           }`}
         >
           {message.text}
@@ -87,13 +87,13 @@ export function ClaudeTokenForm({ hasToken: initialHasToken }: ClaudeTokenFormPr
 
       {hasToken ? (
         <div className="space-y-4">
-          <div className="p-3 bg-green-50 border border-green-200 rounded">
-            <p className="text-sm text-green-800">✓ Claude API token is configured</p>
+          <div className="p-3 bg-green-900/30 border border-green-700 rounded">
+            <p className="text-sm text-green-400">✓ Claude API token is configured</p>
           </div>
           <button
             onClick={handleRemove}
             disabled={loading}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? "Removing..." : "Remove Token"}
           </button>
@@ -101,7 +101,7 @@ export function ClaudeTokenForm({ hasToken: initialHasToken }: ClaudeTokenFormPr
       ) : (
         <form onSubmit={handleSave} className="space-y-4">
           <div>
-            <label htmlFor="token" className="block text-sm font-medium mb-2">
+            <label htmlFor="token" className="block text-sm font-medium mb-2 text-gray-200">
               Claude API Token
             </label>
             <input
@@ -110,17 +110,17 @@ export function ClaudeTokenForm({ hasToken: initialHasToken }: ClaudeTokenFormPr
               value={token}
               onChange={(e) => setToken(e.target.value)}
               placeholder="sk-ant-..."
-              className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               required
               disabled={loading}
             />
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-400 mt-1">
               Get your token from{" "}
               <a
                 href="https://console.anthropic.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
+                className="text-orange-400 hover:text-orange-300 hover:underline"
               >
                 Anthropic Console
               </a>
@@ -129,7 +129,7 @@ export function ClaudeTokenForm({ hasToken: initialHasToken }: ClaudeTokenFormPr
           <button
             type="submit"
             disabled={loading || !token}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? "Saving..." : "Save Token"}
           </button>

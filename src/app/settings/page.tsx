@@ -30,7 +30,7 @@ export default async function SettingsPage() {
         {/* Claude API Token Section */}
         <section className="border rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4">Claude API Token</h2>
-          <p className="text-gray-600 mb-6">
+          <p className="text-gray-400 mb-6">
             Your Claude API token is used to run AI battles. It will be stored encrypted and never
             shared.
           </p>
