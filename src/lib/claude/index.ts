@@ -120,11 +120,9 @@ export function isAuthConfigured(): boolean {
  * Model name mappings for convenience
  */
 export const MODELS = {
-  OPUS: "claude-opus-4",
-  SONNET: "claude-sonnet-4",
-  HAIKU: "claude-haiku-4",
-  OPUS_35: "claude-opus-3-5-20241022",
-  SONNET_35: "claude-sonnet-3-5-20241022",
+  OPUS: "opus",
+  SONNET: "sonnet",
+  HAIKU: "haiku",
 } as const;
 
 /**
