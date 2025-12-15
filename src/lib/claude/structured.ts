@@ -171,6 +171,8 @@ Provide your response as a JSON object. You can wrap it in a markdown code block
     }
 
     const resultContent = finalEvent.content as any;
+    console.log("[Structured] Result content:", JSON.stringify(resultContent, null, 2));
+
     const cost = {
       totalUsd: resultContent.total_cost_usd || 0,
       inputTokens: resultContent.usage?.input_tokens || 0,
@@ -180,14 +182,14 @@ Provide your response as a JSON object. You can wrap it in a markdown code block
       modelUsage: resultContent.modelUsage,
     };
 
-    const success = resultContent.subtype === "success";
+    const success = resultContent.subtype === "success" && !resultContent.is_error;
     const content = resultContent.result || "";
 
     if (!success) {
       return {
         success: false,
         cost,
-        error: resultContent.errors?.join(", ") || "Agent execution failed",
+        error: resultContent.errors?.join(", ") || resultContent.result || "Agent execution failed",
         rawContent: content,
       };
     }
