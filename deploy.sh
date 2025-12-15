@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# Allow rsync partial transfer warnings (exit 23)
+rsync_safe() {
+  rsync "$@" || [ $? -eq 23 ]
+}
+
 # Thunderdome Deploy Script
 # Builds locally (fast Mac), syncs to x86 server
 
@@ -16,19 +21,19 @@ npm run build
 
 # Sync standalone build
 echo "📤 Syncing build artifacts..."
-rsync -avz --delete .next/standalone/ $SERVER:$REMOTE_DIR/
-rsync -avz --delete .next/static $SERVER:$REMOTE_DIR/.next/
-rsync -avz --delete public/ $SERVER:$REMOTE_DIR/public/
+rsync_safe -avz --delete .next/standalone/ $SERVER:$REMOTE_DIR/
+rsync_safe -avz --delete .next/static $SERVER:$REMOTE_DIR/.next/
+rsync_safe -avz --delete public/ $SERVER:$REMOTE_DIR/public/
 
 # Sync package files for native module install
-rsync -avz package.json package-lock.json $SERVER:$REMOTE_DIR/
+rsync_safe -avz package.json package-lock.json $SERVER:$REMOTE_DIR/
 
 # Sync drizzle for migrations
-rsync -avz drizzle/ $SERVER:$REMOTE_DIR/drizzle/ 2>/dev/null || true
-rsync -avz drizzle.config.ts $SERVER:$REMOTE_DIR/ 2>/dev/null || true
+rsync_safe -avz drizzle/ $SERVER:$REMOTE_DIR/drizzle/ 2>/dev/null || true
+rsync_safe -avz drizzle.config.ts $SERVER:$REMOTE_DIR/ 2>/dev/null || true
 
 # Copy env
-rsync -avz .env.production $SERVER:$REMOTE_DIR/.env 2>/dev/null || true
+rsync_safe -avz .env.production $SERVER:$REMOTE_DIR/.env 2>/dev/null || true
 
 # Install native deps & restart on server
 echo "🔄 Finalizing on server..."
