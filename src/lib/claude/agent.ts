@@ -3,7 +3,12 @@
  */
 
 import { type Options, query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { createRequire } from "module";
 import type { AgentConfig, AgentResult, CostInfo, StreamEvent } from "./types";
+
+// Resolve SDK's bundled CLI as fallback
+const require = createRequire(import.meta.url);
+const SDK_CLI_PATH = require.resolve("@anthropic-ai/claude-agent-sdk/cli.js");
 
 /**
  * Processes an SDK message into a StreamEvent
@@ -126,12 +131,8 @@ export async function* runAgent(
   let agentResult: AgentResult | undefined;
 
   // Build SDK options from our config
-  // Note: pathToClaudeCodeExecutable MUST come after additionalOptions spread
-  const claudePath = process.env.CLAUDE_CLI_PATH ||
-    (process.env.HOME ? `${process.env.HOME}/.local/bin/claude` : "/usr/local/bin/claude");
-
-  console.log("[Agent] Claude path:", claudePath);
-  console.log("[Agent] HOME:", process.env.HOME);
+  // Use the SDK's bundled CLI
+  console.log("[Agent] Using SDK CLI:", SDK_CLI_PATH);
   console.log("[Agent] Token set:", !!oauthToken);
 
   const options: Options = {
@@ -145,9 +146,8 @@ export async function* runAgent(
     includePartialMessages: config.includePartialMessages,
     maxBudgetUsd: config.maxBudgetUsd,
     ...config.additionalOptions,
-    // Path to Claude CLI - check env var first, then common locations
-    // Must come AFTER spread to avoid being overwritten
-    pathToClaudeCodeExecutable: claudePath,
+    // Use SDK's bundled CLI
+    pathToClaudeCodeExecutable: SDK_CLI_PATH,
     // Enable stderr capture to see actual errors from claude
     stderr: (data: string) => console.error("[Claude stderr]", data),
   };

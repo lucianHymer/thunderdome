@@ -123,9 +123,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           );
 
           for await (const event of agentStream) {
+            console.log("[Consul] Event type:", event.type);
+
             // runAgent yields "thinking" events containing raw stream data
             if (event.type === "thinking") {
               const streamEvent = event.content as any;
+              console.log("[Consul] Stream event type:", streamEvent?.type);
 
               // Handle content block delta for streaming text
               if (
