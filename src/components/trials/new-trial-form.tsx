@@ -10,15 +10,30 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
+import { RepoSelector } from "./repo-selector";
+
+interface Repository {
+  id: number;
+  name: string;
+  fullName: string;
+  description: string | null;
+  url: string;
+  private: boolean;
+  fork: boolean;
+  language: string | null;
+  stars: number;
+  updatedAt: string;
+  defaultBranch: string;
+}
 
 export function NewTrialForm() {
   const router = useRouter();
   const [challengePrompt, setChallengePrompt] = useState("");
-  const [trialType, setTrialType] = useState<"GLADIATOR" | "LEGION">("GLADIATOR");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showRepoSelector, setShowRepoSelector] = useState(false);
+  const [selectedRepo, setSelectedRepo] = useState<Repository | undefined>();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +52,7 @@ export function NewTrialForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           challengePrompt,
-          trialType,
+          ...(selectedRepo && { repoUrl: selectedRepo.url }),
         }),
       });
 
@@ -74,36 +89,36 @@ export function NewTrialForm() {
       </div>
 
       <div>
-        <Label className="text-lg font-semibold mb-2 block">Trial Type</Label>
-        <RadioGroup
-          value={trialType}
-          onValueChange={(v) => setTrialType(v as "GLADIATOR" | "LEGION")}
-        >
-          <div className="flex items-start space-x-3 border border-border rounded-lg p-4">
-            <RadioGroupItem value="GLADIATOR" id="gladiator" />
-            <div className="flex-1">
-              <Label htmlFor="gladiator" className="font-semibold cursor-pointer">
-                ⚔️ Gladiator (Ideation)
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Multiple AI agents compete to solve the same challenge. Best for exploring different
-                approaches.
-              </p>
-            </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowRepoSelector(!showRepoSelector)}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <span className={`transition-transform ${showRepoSelector ? "rotate-90" : ""}`}>▶</span>
+            <span>
+              {selectedRepo ? `Repository: ${selectedRepo.fullName}` : "Add Repository (Optional)"}
+            </span>
+          </button>
+          {selectedRepo && (
+            <button
+              type="button"
+              onClick={() => setSelectedRepo(undefined)}
+              className="text-xs text-red-400 hover:text-red-300"
+            >
+              ✕ Clear
+            </button>
+          )}
+        </div>
+        {showRepoSelector && (
+          <div className="mt-3 border border-border rounded-lg p-4">
+            <p className="text-sm text-muted-foreground mb-3">
+              Select a repository for Code Battle mode. Gladiators will be able to modify code and
+              create branches.
+            </p>
+            <RepoSelector onSelect={setSelectedRepo} selectedRepo={selectedRepo} />
           </div>
-
-          <div className="flex items-start space-x-3 border border-border rounded-lg p-4 opacity-50">
-            <RadioGroupItem value="LEGION" id="legion" disabled />
-            <div className="flex-1">
-              <Label htmlFor="legion" className="font-semibold">
-                🏛️ Legion (Implementation)
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                AI agents collaborate in phases to implement a feature. Coming soon!
-              </p>
-            </div>
-          </div>
-        </RadioGroup>
+        )}
       </div>
 
       {error && (

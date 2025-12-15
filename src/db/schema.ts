@@ -72,7 +72,7 @@ export const trials = sqliteTable("trials", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id),
-  repoUrl: text("repo_url").notNull(),
+  repoUrl: text("repo_url"), // Optional - only needed for Code Battle mode
   challengePrompt: text("challenge_prompt").notNull(),
   trialType: text("trial_type", { enum: ["GLADIATOR", "LEGION"] }).notNull(),
   status: text("status", {

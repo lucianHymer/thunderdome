@@ -29,7 +29,7 @@ interface Verdict {
 interface Trial {
   id: string;
   challengePrompt: string;
-  repoUrl: string;
+  repoUrl: string | null;
   trialType: string;
 }
 

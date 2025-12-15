@@ -48,19 +48,11 @@ export async function POST(request: NextRequest) {
     const user = await requireUser();
 
     const body = await request.json();
-    const { repoUrl, challengePrompt, trialType } = body;
+    const { repoUrl, challengePrompt } = body;
 
     // Validate required fields
-    if (!repoUrl || typeof repoUrl !== "string") {
-      return NextResponse.json({ error: "repoUrl is required" }, { status: 400 });
-    }
-
     if (!challengePrompt || typeof challengePrompt !== "string") {
       return NextResponse.json({ error: "challengePrompt is required" }, { status: 400 });
-    }
-
-    if (!trialType || !["GLADIATOR", "LEGION"].includes(trialType)) {
-      return NextResponse.json({ error: "trialType must be GLADIATOR or LEGION" }, { status: 400 });
     }
 
     // Create the trial
@@ -70,7 +62,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         repoUrl,
         challengePrompt,
-        trialType,
+        trialType: "GLADIATOR", // Default - Lanista decides actual approach
         status: "PENDING",
       })
       .returning();

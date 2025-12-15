@@ -3,12 +3,7 @@
  */
 
 import { runAgent } from "./agent";
-import type {
-  AgentResult,
-  ParallelAgentConfig,
-  ParallelStreamEvent,
-  StreamEvent,
-} from "./types";
+import type { AgentResult, ParallelAgentConfig, ParallelStreamEvent, StreamEvent } from "./types";
 
 /**
  * Runs multiple agents in parallel and yields events from all of them
