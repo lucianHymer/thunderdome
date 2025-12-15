@@ -126,6 +126,14 @@ export async function* runAgent(
   let agentResult: AgentResult | undefined;
 
   // Build SDK options from our config
+  // Note: pathToClaudeCodeExecutable MUST come after additionalOptions spread
+  const claudePath = process.env.CLAUDE_CLI_PATH ||
+    (process.env.HOME ? `${process.env.HOME}/.local/bin/claude` : "/usr/local/bin/claude");
+
+  console.log("[Agent] Claude path:", claudePath);
+  console.log("[Agent] HOME:", process.env.HOME);
+  console.log("[Agent] Token set:", !!oauthToken);
+
   const options: Options = {
     systemPrompt: config.systemPrompt,
     model: config.model,
@@ -136,11 +144,10 @@ export async function* runAgent(
     permissionMode: config.permissionMode,
     includePartialMessages: config.includePartialMessages,
     maxBudgetUsd: config.maxBudgetUsd,
-    // Path to Claude CLI - check env var first, then common locations
-    pathToClaudeCodeExecutable:
-      process.env.CLAUDE_CLI_PATH ||
-      (process.env.HOME ? `${process.env.HOME}/.local/bin/claude` : "/usr/local/bin/claude"),
     ...config.additionalOptions,
+    // Path to Claude CLI - check env var first, then common locations
+    // Must come AFTER spread to avoid being overwritten
+    pathToClaudeCodeExecutable: claudePath,
   };
 
   // Set OAuth token if provided (for Claude Code integration)
