@@ -56,13 +56,13 @@ export function NewTrialForm() {
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.error || "Failed to create trial");
       }
 
-      const { trialId } = await response.json();
-      router.push(`/trials/${trialId}`);
+      router.push(`/trials/${data.trial.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create trial");
       setIsSubmitting(false);
