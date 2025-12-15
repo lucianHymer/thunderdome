@@ -13,6 +13,7 @@ import { requireUser } from "@/lib/session";
 import { runCodeBattle } from "@/lib/trial/code-battle/orchestrator";
 import { runLanista } from "@/lib/trial/lanista";
 import { runGladiators } from "@/lib/trial/gladiators";
+import { runArbiter } from "@/lib/trial/arbiter";
 import { broadcastTrialUpdate } from "@/lib/trial/broadcast";
 
 /**
@@ -107,6 +108,11 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
         // Run gladiators in parallel
         await runGladiators(trialId, claudeToken);
+
+        // Run Arbiter to design judges and evaluate (includes running judges)
+        await runArbiter(trialId, claudeToken, (event) => {
+          broadcastTrialUpdate(trialId, event);
+        });
       } catch (error) {
         console.error("Trial execution failed:", error);
         broadcastTrialUpdate(trialId, {
