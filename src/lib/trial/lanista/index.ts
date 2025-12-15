@@ -12,14 +12,7 @@ import {
   MODELS,
 } from '../../claude/index.js';
 import { LANISTA_SYSTEM_PROMPT, LANISTA_USER_PROMPT } from './prompts.js';
-
-/**
- * Status update callback for SSE broadcasting
- */
-export type StatusCallback = (event: {
-  type: 'lanista_thinking' | 'lanista_complete' | 'lanista_error' | 'gladiators_created';
-  data: any;
-}) => void;
+import { StatusCallback } from '../types.js';
 
 /**
  * Maps gladiator model names to actual Claude model IDs

@@ -1,0 +1,203 @@
+/**
+ * Arbiter runner - designs judges based on gladiator outputs
+ */
+
+import { eq } from 'drizzle-orm';
+import { db } from '../../../db/index.js';
+import { trials, gladiators, judges } from '../../../db/schema.js';
+import {
+  runStructuredAgentWithRetry,
+  ArbiterOutput,
+  ArbiterOutputSchema,
+  MODELS,
+} from '../../claude/index.js';
+import { ARBITER_SYSTEM_PROMPT, buildArbiterUserPrompt } from './prompts.js';
+import { transitionTrialState } from '../state.js';
+import { broadcastTrialUpdate } from '../broadcast.js';
+import { StatusCallback } from '../types.js';
+
+/**
+ * Runs the Arbiter to design judges based on gladiator outputs
+ *
+ * @param trialId - ID of the trial to design judges for
+ * @param oauthToken - Claude OAuth token for API calls
+ * @param onStatus - Optional callback for status updates (for SSE)
+ * @returns The Arbiter's output
+ */
+export async function runArbiter(
+  trialId: string,
+  oauthToken: string,
+  onStatus?: StatusCallback
+): Promise<ArbiterOutput> {
+  try {
+    // Fetch the trial
+    const trial = await db.query.trials.findFirst({
+      where: eq(trials.id, trialId),
+    });
+
+    if (!trial) {
+      throw new Error(`Trial not found: ${trialId}`);
+    }
+
+    // Fetch all gladiators with their outputs
+    const gladiatorRecords = await db.query.gladiators.findMany({
+      where: eq(gladiators.trialId, trialId),
+    });
+
+    if (gladiatorRecords.length === 0) {
+      throw new Error(`No gladiators found for trial ${trialId}`);
+    }
+
+    // Check if we have any successful gladiators
+    const successfulGladiators = gladiatorRecords.filter(
+      (g) => g.status === 'COMPLETED' && g.responseContent
+    );
+
+    if (successfulGladiators.length === 0) {
+      throw new Error('No successful gladiator outputs to evaluate');
+    }
+
+    // Transition to arbiter_designing state
+    await transitionTrialState(trialId, 'arbiter_designing', {
+      successfulGladiators: successfulGladiators.length,
+      totalGladiators: gladiatorRecords.length,
+    });
+
+    // Notify that Arbiter is thinking
+    onStatus?.({
+      type: 'arbiter_thinking',
+      data: {
+        trialId,
+        status: 'Arbiter is analyzing gladiator outputs and designing judges...',
+        successfulGladiators: successfulGladiators.length,
+      },
+    });
+
+    // Build the prompt with gladiator outputs
+    const userPrompt = buildArbiterUserPrompt(
+      trial.challengePrompt,
+      gladiatorRecords.map((g) => ({
+        id: g.id,
+        name: g.name,
+        status: g.status,
+        responseContent: g.responseContent,
+      }))
+    );
+
+    // Run the Arbiter with structured output
+    const result = await runStructuredAgentWithRetry(
+      userPrompt,
+      ArbiterOutputSchema,
+      {
+        model: MODELS.OPUS, // Use Opus for the Arbiter - needs strong analytical reasoning
+        allowedTools: [], // Arbiter doesn't need tools, just reasoning
+        maxTurns: 1, // Single-turn structured output
+        systemPrompt: ARBITER_SYSTEM_PROMPT,
+        permissionMode: 'bypassPermissions',
+      },
+      2, // Max 2 retries for validation failures
+      oauthToken
+    );
+
+    if (!result.success || !result.data) {
+      throw new Error(`Arbiter failed: ${result.error || 'No data returned'}`);
+    }
+
+    const arbiterOutput = result.data;
+
+    // Store the Arbiter plan in the trial
+    await db
+      .update(trials)
+      .set({
+        arbiterPlan: JSON.stringify({
+          reasoning: arbiterOutput.reasoning,
+          judges: arbiterOutput.judges,
+          cost: result.cost,
+        }),
+      })
+      .where(eq(trials.id, trialId));
+
+    // Notify that Arbiter is complete
+    onStatus?.({
+      type: 'arbiter_complete',
+      data: {
+        trialId,
+        reasoning: arbiterOutput.reasoning,
+        judgeCount: arbiterOutput.judges.length,
+        cost: result.cost,
+      },
+    });
+
+    // Create judge records in the database
+    const judgeRecords = arbiterOutput.judges.map((j) => ({
+      trialId,
+      name: j.name,
+      focus: j.focus,
+      model: MODELS.OPUS, // Use Opus for judges - they need strong evaluation capabilities
+      evaluation: JSON.stringify({
+        evaluationCriteria: j.evaluationCriteria,
+      }),
+    }));
+
+    // Insert all judges
+    const insertedJudges = await db.insert(judges).values(judgeRecords).returning();
+
+    // Notify that judges have been created
+    onStatus?.({
+      type: 'judges_created',
+      data: {
+        trialId,
+        judges: insertedJudges.map((j) => ({
+          id: j.id,
+          name: j.name,
+          focus: j.focus,
+        })),
+      },
+    });
+
+    // Transition to judging state
+    await transitionTrialState(trialId, 'judging', {
+      judgeCount: insertedJudges.length,
+    });
+
+    // Kick off judges (import dynamically to avoid circular dependency)
+    const { runJudges } = await import('../judges/index.js');
+
+    // Notify that judging has started
+    onStatus?.({
+      type: 'judging_started',
+      data: {
+        trialId,
+        judgeCount: insertedJudges.length,
+      },
+    });
+
+    // Run judges (this will handle verdict synthesis and state transitions)
+    await runJudges(
+      trialId,
+      insertedJudges,
+      successfulGladiators,
+      oauthToken,
+      onStatus
+    );
+
+    return arbiterOutput;
+  } catch (error) {
+    // Notify of error
+    onStatus?.({
+      type: 'arbiter_error',
+      data: {
+        trialId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+    });
+
+    // Update trial status to FAILED
+    await transitionTrialState(trialId, 'failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      phase: 'arbiter',
+    });
+
+    throw error;
+  }
+}
