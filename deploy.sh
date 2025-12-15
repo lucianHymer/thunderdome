@@ -9,12 +9,16 @@ echo "⚡ Deploying Thunderdome"
 echo "🔨 Building..."
 npm run build
 
+# Find where server.js actually is (Next.js mirrors project structure)
+STANDALONE_ROOT=$(dirname $(find .next/standalone -name "server.js" -type f | head -1))
+echo "📍 Found standalone at: $STANDALONE_ROOT"
+
 # Copy static assets into standalone
-cp -r .next/static .next/standalone/.next/
-[ -d public ] && cp -r public .next/standalone/
+cp -r .next/static "$STANDALONE_ROOT/.next/"
+[ -d public ] && cp -r public "$STANDALONE_ROOT/"
 
 echo "📤 Uploading..."
-rsync -avz --delete .next/standalone/ $SERVER:$REMOTE_DIR/
+rsync -avz --delete "$STANDALONE_ROOT/" $SERVER:$REMOTE_DIR/
 
 # Env
 scp .env.production $SERVER:$REMOTE_DIR/.env 2>/dev/null || echo "No .env.production"
