@@ -65,7 +65,12 @@ export default async function TrialPage({ params }: PageProps) {
             judges={trialJudges}
           />
         ) : (
-          <BattleView trial={trial} gladiators={trialGladiators} verdict={verdict || null} />
+          <BattleView
+            trial={trial}
+            gladiators={trialGladiators}
+            judges={trialJudges}
+            verdict={verdict || null}
+          />
         )}
       </div>
     </div>
