@@ -6,8 +6,8 @@
 
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PhaseState } from "@/hooks/use-trial-phases";
 import { cn } from "@/lib/utils";
 
@@ -47,11 +47,7 @@ interface JudgeEvaluationCardProps {
   index: number;
 }
 
-export function JudgeEvaluationCard({
-  judge,
-  gladiators,
-  index,
-}: JudgeEvaluationCardProps) {
+export function JudgeEvaluationCard({ judge, gladiators, index }: JudgeEvaluationCardProps) {
   const status = judge.status as PhaseState;
   const evaluations = judge.evaluationData?.output?.evaluations || [];
   const summary = judge.evaluationData?.output?.summary;
@@ -61,7 +57,7 @@ export function JudgeEvaluationCard({
       className={cn(
         "border-blue-500/20 bg-blue-950/10 transition-all duration-300",
         "animate-fadeIn",
-        status === "active" && "border-blue-500/50"
+        status === "active" && "border-blue-500/50",
       )}
       style={{ animationDelay: `${index * 100}ms` }}
     >
@@ -69,11 +65,13 @@ export function JudgeEvaluationCard({
         <CardTitle className="flex items-center justify-between text-base">
           <span className="flex items-center gap-2">
             <span>📊</span>
-            <span className={cn(
-              status === "active" && "text-blue-400",
-              status === "complete" && "text-green-400",
-              status === "error" && "text-red-400"
-            )}>
+            <span
+              className={cn(
+                status === "active" && "text-blue-400",
+                status === "complete" && "text-green-400",
+                status === "error" && "text-red-400",
+              )}
+            >
               {judge.name}
             </span>
           </span>
@@ -83,36 +81,35 @@ export function JudgeEvaluationCard({
       </CardHeader>
       <CardContent className="space-y-3">
         {status === "pending" && (
-          <div className="text-sm text-muted-foreground">
-            Waiting to evaluate...
-          </div>
+          <div className="text-sm text-muted-foreground">Waiting to evaluate...</div>
         )}
 
         {status === "active" && (
           <div className="flex items-center gap-2 text-sm text-blue-400">
             <span className="animate-pulse">Evaluating</span>
             <span className="flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce"
+                style={{ animationDelay: "0ms" }}
+              />
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce"
+                style={{ animationDelay: "150ms" }}
+              />
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce"
+                style={{ animationDelay: "300ms" }}
+              />
             </span>
           </div>
         )}
 
-        {status === "error" && (
-          <div className="text-sm text-red-400">
-            Evaluation failed
-          </div>
-        )}
+        {status === "error" && <div className="text-sm text-red-400">Evaluation failed</div>}
 
         {status === "complete" && evaluations.length > 0 && (
           <div className="space-y-2">
             {/* Summary */}
-            {summary && (
-              <p className="text-xs text-muted-foreground italic mb-2">
-                "{summary}"
-              </p>
-            )}
+            {summary && <p className="text-xs text-muted-foreground italic mb-2">"{summary}"</p>}
 
             {/* Scores */}
             <div className="space-y-1.5">
@@ -168,9 +165,5 @@ function ScoreBadge({ score }: { score: number }) {
     return "bg-red-500/20 text-red-400";
   };
 
-  return (
-    <Badge className={cn("text-xs font-mono", getScoreColor(score))}>
-      {score}/100
-    </Badge>
-  );
+  return <Badge className={cn("text-xs font-mono", getScoreColor(score))}>{score}/100</Badge>;
 }

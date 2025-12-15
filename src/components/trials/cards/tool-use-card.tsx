@@ -7,11 +7,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
 interface ToolUseCardProps {
@@ -89,30 +85,21 @@ export function ToolUseCard({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div
-        className={cn(
-          "rounded-lg border transition-all duration-200",
-          getToolColor(toolName)
-        )}
-      >
+      <div className={cn("rounded-lg border transition-all duration-200", getToolColor(toolName))}>
         <CollapsibleTrigger asChild>
           <button
             type="button"
             className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white/5 transition-colors rounded-lg"
           >
             <span>{getToolIcon(toolName)}</span>
-            <span className="font-mono text-sm text-muted-foreground">
-              {toolName}
-            </span>
+            <span className="font-mono text-sm text-muted-foreground">{toolName}</span>
             {preview && (
-              <span className="text-xs text-muted-foreground/70 truncate flex-1">
-                {preview}
-              </span>
+              <span className="text-xs text-muted-foreground/70 truncate flex-1">{preview}</span>
             )}
             <span
               className={cn(
                 "text-muted-foreground transition-transform text-xs",
-                isOpen && "rotate-90"
+                isOpen && "rotate-90",
               )}
             >
               ▶

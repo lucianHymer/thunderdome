@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTrialPhases } from "@/hooks/use-trial-phases";
@@ -75,7 +75,7 @@ export function BattleView({
     trial.id,
     trial.status,
     trial.lanistaPlan,
-    trial.arbiterPlan
+    trial.arbiterPlan,
   );
 
   // Refetch trial data from server
@@ -126,13 +126,11 @@ export function BattleView({
 
   // Use streamed status if available, otherwise use trial status
   const currentStatus =
-    (stream.lastEvent as any)?.trial?.status ||
-    (stream.lastEvent as any)?.status ||
-    trial.status;
+    (stream.lastEvent as any)?.trial?.status || (stream.lastEvent as any)?.status || trial.status;
 
   // Get error from stream events
   const errorEvent = stream.events.find(
-    (e: any) => e.type === "error" || e.type?.includes("_error")
+    (e: any) => e.type === "error" || e.type?.includes("_error"),
   );
   const errorMessage =
     errorEvent?.data?.error ||
@@ -175,24 +173,17 @@ export function BattleView({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground whitespace-pre-wrap">
-            {trial.challengePrompt}
-          </p>
+          <p className="text-muted-foreground whitespace-pre-wrap">{trial.challengePrompt}</p>
         </CardContent>
       </Card>
 
       {/* Status Banner with Resume */}
       <div className="flex items-center gap-4">
         <div className="flex-1">
-          <StatusBanner
-            status={currentStatus}
-            message={(stream.lastEvent as any)?.message}
-          />
+          <StatusBanner status={currentStatus} message={(stream.lastEvent as any)?.message} />
         </div>
         <div className="flex items-center gap-2">
-          {stream.connected && (
-            <Badge className="bg-green-600 text-xs">Live</Badge>
-          )}
+          {stream.connected && <Badge className="bg-green-600 text-xs">Live</Badge>}
           {currentPhase && (
             <Badge variant="outline" className="text-xs capitalize">
               {currentPhase}
@@ -239,12 +230,7 @@ export function BattleView({
       )}
 
       {/* Trial Timeline - The main event! */}
-      <TrialTimeline
-        phases={phases}
-        gladiators={gladiators}
-        judges={judges}
-        verdict={verdict}
-      />
+      <TrialTimeline phases={phases} gladiators={gladiators} judges={judges} verdict={verdict} />
 
       {/* Debug Panel */}
       <div className="border-t border-border pt-6 mt-8">
@@ -253,11 +239,7 @@ export function BattleView({
           onClick={() => setShowDebug(!showDebug)}
           className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-2"
         >
-          <span
-            className={`transition-transform ${showDebug ? "rotate-90" : ""}`}
-          >
-            ▶
-          </span>
+          <span className={`transition-transform ${showDebug ? "rotate-90" : ""}`}>▶</span>
           Debug Panel
         </button>
         {showDebug && (
@@ -265,9 +247,7 @@ export function BattleView({
             {/* Trial Raw Data */}
             <Card className="border-gray-700">
               <CardHeader className="py-3">
-                <CardTitle className="text-sm text-gray-400">
-                  Trial Record
-                </CardTitle>
+                <CardTitle className="text-sm text-gray-400">Trial Record</CardTitle>
               </CardHeader>
               <CardContent>
                 <pre className="text-xs font-mono overflow-x-auto bg-black/50 text-gray-200 p-3 rounded">
@@ -283,7 +263,7 @@ export function BattleView({
                       hasArbiterPlan: !!trial.arbiterPlan,
                     },
                     null,
-                    2
+                    2,
                   )}
                 </pre>
               </CardContent>
@@ -292,9 +272,7 @@ export function BattleView({
             {/* Phase States */}
             <Card className="border-gray-700">
               <CardHeader className="py-3">
-                <CardTitle className="text-sm text-gray-400">
-                  Phase States
-                </CardTitle>
+                <CardTitle className="text-sm text-gray-400">Phase States</CardTitle>
               </CardHeader>
               <CardContent>
                 <pre className="text-xs font-mono overflow-x-auto bg-black/50 text-gray-200 p-3 rounded max-h-48 overflow-y-auto">
@@ -308,7 +286,7 @@ export function BattleView({
                       verdict: phases.verdict.state,
                     },
                     null,
-                    2
+                    2,
                   )}
                 </pre>
               </CardContent>
@@ -317,9 +295,7 @@ export function BattleView({
             {/* Stream State */}
             <Card className="border-gray-700">
               <CardHeader className="py-3">
-                <CardTitle className="text-sm text-gray-400">
-                  Stream State
-                </CardTitle>
+                <CardTitle className="text-sm text-gray-400">Stream State</CardTitle>
               </CardHeader>
               <CardContent>
                 <pre className="text-xs font-mono overflow-x-auto bg-black/50 text-gray-200 p-3 rounded">
@@ -331,7 +307,7 @@ export function BattleView({
                       lastEvent: stream.lastEvent,
                     },
                     null,
-                    2
+                    2,
                   )}
                 </pre>
               </CardContent>

@@ -7,8 +7,8 @@
 "use client";
 
 import type { PhaseState } from "@/hooks/use-trial-phases";
-import { ThinkingIndicator } from "../timeline-phase";
 import { JudgeEvaluationCard } from "../cards/judge-evaluation-card";
+import { ThinkingIndicator } from "../timeline-phase";
 
 interface Gladiator {
   id: string;
@@ -32,18 +32,10 @@ interface PhaseJudgingProps {
   error?: string;
 }
 
-export function PhaseJudging({
-  state,
-  judges,
-  gladiators,
-  totalCost,
-  error,
-}: PhaseJudgingProps) {
+export function PhaseJudging({ state, judges, gladiators, totalCost, error }: PhaseJudgingProps) {
   if (state === "pending") {
     return (
-      <div className="text-muted-foreground text-sm">
-        Waiting for Arbiter to design judges...
-      </div>
+      <div className="text-muted-foreground text-sm">Waiting for Arbiter to design judges...</div>
     );
   }
 
@@ -61,11 +53,7 @@ export function PhaseJudging({
   }
 
   if (judges.length === 0) {
-    return (
-      <div className="text-muted-foreground text-sm">
-        No judges created yet.
-      </div>
-    );
+    return <div className="text-muted-foreground text-sm">No judges created yet.</div>;
   }
 
   // Count judge statuses
@@ -89,12 +77,7 @@ export function PhaseJudging({
       {/* Judge cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {judges.map((judge, index) => (
-          <JudgeEvaluationCard
-            key={judge.id}
-            judge={judge}
-            gladiators={gladiators}
-            index={index}
-          />
+          <JudgeEvaluationCard key={judge.id} judge={judge} gladiators={gladiators} index={index} />
         ))}
       </div>
 

@@ -7,13 +7,13 @@
 
 "use client";
 
-import type { TrialPhases, JudgeDesign } from "@/hooks/use-trial-phases";
-import { TimelinePhase } from "./timeline-phase";
-import { PhaseLanista } from "./phases/phase-lanista";
-import { PhaseBattle } from "./phases/phase-battle";
+import type { JudgeDesign, TrialPhases } from "@/hooks/use-trial-phases";
 import { PhaseArbiter } from "./phases/phase-arbiter";
+import { PhaseBattle } from "./phases/phase-battle";
 import { PhaseJudging } from "./phases/phase-judging";
+import { PhaseLanista } from "./phases/phase-lanista";
 import { PhaseVerdict } from "./phases/phase-verdict";
+import { TimelinePhase } from "./timeline-phase";
 
 interface Gladiator {
   id: string;
@@ -45,12 +45,7 @@ interface TrialTimelineProps {
   verdict?: Verdict | null;
 }
 
-export function TrialTimeline({
-  phases,
-  gladiators,
-  judges = [],
-  verdict,
-}: TrialTimelineProps) {
+export function TrialTimeline({ phases, gladiators, judges = [], verdict }: TrialTimelineProps) {
   // Combine phase judge designs with actual judge records
   const judgesWithEvaluations = judges.map((judge) => {
     const phaseJudge = phases.judging.judges?.find((j) => j.judgeId === judge.id);

@@ -7,10 +7,10 @@
 
 "use client";
 
-import type { PhaseState, GladiatorDesign, CostInfo } from "@/hooks/use-trial-phases";
-import { ThinkingIndicator } from "../timeline-phase";
-import { GladiatorConfigCard } from "../cards/gladiator-config-card";
+import type { CostInfo, GladiatorDesign, PhaseState } from "@/hooks/use-trial-phases";
 import { cn } from "@/lib/utils";
+import { GladiatorConfigCard } from "../cards/gladiator-config-card";
+import { ThinkingIndicator } from "../timeline-phase";
 
 interface PhaseLanistaProps {
   state: PhaseState;
@@ -28,11 +28,7 @@ export function PhaseLanista({
   error,
 }: PhaseLanistaProps) {
   if (state === "pending") {
-    return (
-      <div className="text-muted-foreground text-sm">
-        Waiting for trial to start...
-      </div>
-    );
+    return <div className="text-muted-foreground text-sm">Waiting for trial to start...</div>;
   }
 
   if (state === "error") {
@@ -66,9 +62,7 @@ export function PhaseLanista({
       {reasoning && (
         <div className="bg-yellow-950/20 border border-yellow-500/20 rounded-lg p-4">
           <h4 className="text-sm font-medium text-yellow-400 mb-2">Strategy</h4>
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-            {reasoning}
-          </p>
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{reasoning}</p>
         </div>
       )}
 

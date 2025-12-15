@@ -41,7 +41,7 @@ export function ScrollableContainer({
       className={cn(
         // min-h-0 is critical for flexbox - allows container to shrink below content size
         "min-h-0 overflow-y-auto",
-        className
+        className,
       )}
     >
       {children}

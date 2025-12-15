@@ -26,7 +26,7 @@ export function JudgeDesignCard({ judge, index }: JudgeDesignCardProps) {
     <Card
       className={cn(
         "border-purple-500/20 bg-purple-950/10 transition-all duration-300",
-        "animate-fadeIn"
+        "animate-fadeIn",
       )}
       style={{ animationDelay: `${index * 100}ms` }}
     >
@@ -47,10 +47,7 @@ export function JudgeDesignCard({ judge, index }: JudgeDesignCardProps) {
             <span className="text-xs text-muted-foreground">Criteria</span>
             <ul className="mt-1 space-y-1">
               {judge.evaluationCriteria.map((criterion, i) => (
-                <li
-                  key={i}
-                  className="text-xs text-muted-foreground flex items-start gap-1.5"
-                >
+                <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
                   <span className="text-purple-400 mt-0.5">•</span>
                   <span>{criterion}</span>
                 </li>

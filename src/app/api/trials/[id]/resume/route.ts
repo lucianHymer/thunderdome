@@ -10,10 +10,10 @@ import { db } from "@/db";
 import { gladiators, trials, users } from "@/db/schema";
 import { decrypt } from "@/lib/encryption";
 import { requireUser } from "@/lib/session";
-import { runLanista } from "@/lib/trial/lanista";
-import { runGladiators } from "@/lib/trial/gladiators";
 import { runArbiter } from "@/lib/trial/arbiter";
 import { broadcastTrialUpdate } from "@/lib/trial/broadcast";
+import { runGladiators } from "@/lib/trial/gladiators";
+import { runLanista } from "@/lib/trial/lanista";
 
 /**
  * POST - Resume a stuck trial

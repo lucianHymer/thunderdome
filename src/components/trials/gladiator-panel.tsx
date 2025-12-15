@@ -7,13 +7,13 @@
 
 "use client";
 
-import { useEffect, useRef, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { useGladiatorStream, type GladiatorStreamEvent } from "@/hooks/use-gladiator-stream";
-import { ToolUseCard } from "./cards/tool-use-card";
 import { Markdown } from "@/components/ui/markdown";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { type GladiatorStreamEvent, useGladiatorStream } from "@/hooks/use-gladiator-stream";
 import { cn } from "@/lib/utils";
+import { ToolUseCard } from "./cards/tool-use-card";
 
 interface GladiatorPanelProps {
   gladiator: {
@@ -95,7 +95,8 @@ export function GladiatorPanel({ gladiator, isWinner }: GladiatorPanelProps) {
       const scrollContainer = scrollRef.current;
       // Only auto-scroll if user is near bottom
       const isNearBottom =
-        scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 100;
+        scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight <
+        100;
       if (isNearBottom) {
         scrollContainer.scrollTop = scrollContainer.scrollHeight;
       }
@@ -111,9 +112,7 @@ export function GladiatorPanel({ gladiator, isWinner }: GladiatorPanelProps) {
         <div className="flex items-center gap-2">
           <span className={cn("text-lg", status.color)}>{status.dot}</span>
           <h3 className="text-lg font-semibold">{gladiator.name}</h3>
-          {isWinner && (
-            <Badge className="bg-yellow-500 text-black">👑 Winner</Badge>
-          )}
+          {isWinner && <Badge className="bg-yellow-500 text-black">👑 Winner</Badge>}
         </div>
         <div className="flex items-center gap-2">
           {stream.isStreaming && (
@@ -169,8 +168,8 @@ export function GladiatorPanel({ gladiator, isWinner }: GladiatorPanelProps) {
                   {gladiator.status === "PENDING"
                     ? "Waiting for gladiator to begin..."
                     : gladiator.status === "RUNNING"
-                    ? "Starting up..."
-                    : "No output recorded."}
+                      ? "Starting up..."
+                      : "No output recorded."}
                 </span>
               ) : (
                 segments.map((segment, index) => {

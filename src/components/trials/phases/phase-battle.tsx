@@ -6,12 +6,12 @@
 
 "use client";
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { PhaseState } from "@/hooks/use-trial-phases";
+import { cn } from "@/lib/utils";
 import { GladiatorPanel } from "../gladiator-panel";
 import { ThinkingIndicator } from "../timeline-phase";
-import { cn } from "@/lib/utils";
 
 interface Gladiator {
   id: string;
@@ -51,18 +51,12 @@ export function PhaseBattle({
 }: PhaseBattleProps) {
   if (state === "pending") {
     return (
-      <div className="text-muted-foreground text-sm">
-        Waiting for gladiators to be created...
-      </div>
+      <div className="text-muted-foreground text-sm">Waiting for gladiators to be created...</div>
     );
   }
 
   if (gladiators.length === 0) {
-    return (
-      <div className="text-muted-foreground text-sm">
-        No gladiators created yet.
-      </div>
-    );
+    return <div className="text-muted-foreground text-sm">No gladiators created yet.</div>;
   }
 
   if (state === "error") {
@@ -93,16 +87,10 @@ export function PhaseBattle({
     <div className="flex items-center gap-4 mb-4 text-sm">
       <ThinkingIndicator message="Battle in progress" colorScheme="orange" />
       <div className="flex gap-3 text-xs">
-        <span className="text-orange-400">
-          {activeGladiators.length} active
-        </span>
-        <span className="text-green-400">
-          {completedGladiators.length} complete
-        </span>
+        <span className="text-orange-400">{activeGladiators.length} active</span>
+        <span className="text-green-400">{completedGladiators.length} complete</span>
         {failedGladiators.length > 0 && (
-          <span className="text-red-400">
-            {failedGladiators.length} failed
-          </span>
+          <span className="text-red-400">{failedGladiators.length} failed</span>
         )}
       </div>
     </div>
@@ -145,7 +133,10 @@ function GladiatorTabs({
 
   return (
     <Tabs defaultValue={gladiators[0]?.id} className="w-full">
-      <TabsList className="grid w-full gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(gladiators.length, 3)}, 1fr)` }}>
+      <TabsList
+        className="grid w-full gap-1"
+        style={{ gridTemplateColumns: `repeat(${Math.min(gladiators.length, 3)}, 1fr)` }}
+      >
         {gladiators.map((gladiator) => {
           const status = getGladiatorStatus(gladiator);
           const isWinner = winnerId === gladiator.id;
@@ -155,7 +146,7 @@ function GladiatorTabs({
               value={gladiator.id}
               className={cn(
                 "data-[state=active]:bg-orange-600 flex items-center gap-1.5",
-                status === "RUNNING" && "animate-pulse"
+                status === "RUNNING" && "animate-pulse",
               )}
             >
               <span>{statusIcons[status] || "⏳"}</span>
@@ -166,11 +157,7 @@ function GladiatorTabs({
         })}
       </TabsList>
       {gladiators.map((gladiator) => (
-        <TabsContent
-          key={gladiator.id}
-          value={gladiator.id}
-          className="mt-4 min-h-[400px]"
-        >
+        <TabsContent key={gladiator.id} value={gladiator.id} className="mt-4 min-h-[400px]">
           <GladiatorPanel
             gladiator={{
               ...gladiator,

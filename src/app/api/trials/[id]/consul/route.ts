@@ -6,9 +6,9 @@
 
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import { runAgent } from "@/lib/claude/agent";
 import { db } from "@/db";
 import { decrees, gladiators, judges, trials, users, verdicts } from "@/db/schema";
+import { runAgent } from "@/lib/claude/agent";
 import { decrypt } from "@/lib/encryption";
 import { requireUser } from "@/lib/session";
 import {
@@ -187,7 +187,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
   } catch (error) {
     console.error("[Consul API] Request error:", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to process request" }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to process request" },
+      { status: 500 },
+    );
   }
 }
 

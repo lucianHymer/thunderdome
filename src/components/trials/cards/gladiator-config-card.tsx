@@ -6,8 +6,8 @@
 
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 interface GladiatorDesign {
@@ -52,7 +52,7 @@ export function GladiatorConfigCard({ gladiator, index }: GladiatorConfigCardPro
     <Card
       className={cn(
         "border-yellow-500/20 bg-yellow-950/10 transition-all duration-300",
-        "animate-fadeIn"
+        "animate-fadeIn",
       )}
       style={{ animationDelay: `${index * 100}ms` }}
     >
@@ -88,11 +88,7 @@ export function GladiatorConfigCard({ gladiator, index }: GladiatorConfigCardPro
         {gladiator.tools && gladiator.tools.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {gladiator.tools.map((tool) => (
-              <Badge
-                key={tool}
-                variant="outline"
-                className="text-xs bg-muted/20 border-muted"
-              >
+              <Badge key={tool} variant="outline" className="text-xs bg-muted/20 border-muted">
                 {tool}
               </Badge>
             ))}

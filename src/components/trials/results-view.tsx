@@ -145,9 +145,7 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="text-lg">
-            {verdict.summary.split(/\n\n##/)[0].trim()}
-          </div>
+          <div className="text-lg">{verdict.summary.split(/\n\n##/)[0].trim()}</div>
           <div className="text-muted-foreground text-sm">
             <Markdown>{verdict.reasoning}</Markdown>
           </div>
@@ -326,7 +324,10 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3">
-            <Button onClick={() => setConsulOpen(true)} className="bg-purple-600 hover:bg-purple-700">
+            <Button
+              onClick={() => setConsulOpen(true)}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
               <MessageSquare className="h-4 w-4 mr-2" />
               Summon the Consul
             </Button>

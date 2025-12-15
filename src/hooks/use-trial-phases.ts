@@ -8,7 +8,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useTrialStream, type TrialEvent } from "./use-trial-stream";
+import { type TrialEvent, useTrialStream } from "./use-trial-stream";
 
 export type PhaseState = "pending" | "active" | "complete" | "error";
 
@@ -109,7 +109,7 @@ function derivePhases(
   events: TrialEvent[],
   trialStatus: string,
   lanistaPlan?: string | null,
-  arbiterPlan?: string | null
+  arbiterPlan?: string | null,
 ): TrialPhases {
   // Initialize default phases
   const phases: TrialPhases = {
@@ -219,7 +219,7 @@ function derivePhases(
       case "gladiator_completed":
         if (event.gladiatorId) {
           phases.battle.activeGladiators = phases.battle.activeGladiators.filter(
-            (id) => id !== event.gladiatorId
+            (id) => id !== event.gladiatorId,
           );
           if (!phases.battle.completedGladiators.includes(event.gladiatorId)) {
             phases.battle.completedGladiators.push(event.gladiatorId);
@@ -230,7 +230,7 @@ function derivePhases(
       case "gladiator_failed":
         if (event.gladiatorId) {
           phases.battle.activeGladiators = phases.battle.activeGladiators.filter(
-            (id) => id !== event.gladiatorId
+            (id) => id !== event.gladiatorId,
           );
           if (!phases.battle.failedGladiators.includes(event.gladiatorId)) {
             phases.battle.failedGladiators.push(event.gladiatorId);
@@ -288,11 +288,9 @@ function derivePhases(
         phases.judging.state = "active";
         break;
 
-      case "judge_thinking":
+      case "judge_thinking": {
         phases.judging.state = "active";
-        const thinkingJudge = phases.judging.judges.find(
-          (j) => j.judgeId === event.data?.judgeId
-        );
+        const thinkingJudge = phases.judging.judges.find((j) => j.judgeId === event.data?.judgeId);
         if (thinkingJudge) {
           thinkingJudge.status = "active";
         } else if (event.data?.judgeId) {
@@ -303,25 +301,24 @@ function derivePhases(
           });
         }
         break;
+      }
 
-      case "judge_complete":
-        const completedJudge = phases.judging.judges.find(
-          (j) => j.judgeId === event.data?.judgeId
-        );
+      case "judge_complete": {
+        const completedJudge = phases.judging.judges.find((j) => j.judgeId === event.data?.judgeId);
         if (completedJudge) {
           completedJudge.status = "complete";
           completedJudge.cost = event.data?.cost;
         }
         break;
+      }
 
-      case "judge_error":
-        const errorJudge = phases.judging.judges.find(
-          (j) => j.judgeId === event.data?.judgeId
-        );
+      case "judge_error": {
+        const errorJudge = phases.judging.judges.find((j) => j.judgeId === event.data?.judgeId);
         if (errorJudge) {
           errorJudge.status = "error";
         }
         break;
+      }
 
       case "all_judges_complete":
         phases.judging.state = "complete";
@@ -423,7 +420,7 @@ export function useTrialPhases(
   trialStatus: string,
   lanistaPlan?: string | null,
   arbiterPlan?: string | null,
-  options: UseTrialPhasesOptions = {}
+  options: UseTrialPhasesOptions = {},
 ): UseTrialPhasesReturn {
   const { enabled = true } = options;
   const stream = useTrialStream(trialId, { enabled });

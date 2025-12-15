@@ -7,9 +7,9 @@
 
 "use client";
 
-import type { PhaseState, JudgeDesign, CostInfo } from "@/hooks/use-trial-phases";
-import { ThinkingIndicator } from "../timeline-phase";
+import type { CostInfo, JudgeDesign, PhaseState } from "@/hooks/use-trial-phases";
 import { JudgeDesignCard } from "../cards/judge-design-card";
+import { ThinkingIndicator } from "../timeline-phase";
 
 interface PhaseArbiterProps {
   state: PhaseState;
@@ -19,13 +19,7 @@ interface PhaseArbiterProps {
   error?: string;
 }
 
-export function PhaseArbiter({
-  state,
-  reasoning,
-  judgeDesigns,
-  cost,
-  error,
-}: PhaseArbiterProps) {
+export function PhaseArbiter({ state, reasoning, judgeDesigns, cost, error }: PhaseArbiterProps) {
   if (state === "pending") {
     return (
       <div className="text-muted-foreground text-sm">
@@ -65,9 +59,7 @@ export function PhaseArbiter({
       {reasoning && (
         <div className="bg-purple-950/20 border border-purple-500/20 rounded-lg p-4">
           <h4 className="text-sm font-medium text-purple-400 mb-2">Analysis</h4>
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-            {reasoning}
-          </p>
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{reasoning}</p>
         </div>
       )}
 
@@ -79,11 +71,7 @@ export function PhaseArbiter({
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {judgeDesigns.map((judge, index) => (
-              <JudgeDesignCard
-                key={judge.id || judge.name}
-                judge={judge}
-                index={index}
-              />
+              <JudgeDesignCard key={judge.id || judge.name} judge={judge} index={index} />
             ))}
           </div>
         </div>

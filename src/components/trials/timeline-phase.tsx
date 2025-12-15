@@ -8,13 +8,9 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { PhaseState } from "@/hooks/use-trial-phases";
+import { cn } from "@/lib/utils";
 
 export type PhaseColorScheme = "yellow" | "orange" | "purple" | "blue" | "green" | "red";
 
@@ -65,9 +61,7 @@ export function TimelinePhase({
   children,
 }: TimelinePhaseProps) {
   // Auto-expand active phases, collapse completed ones
-  const [isOpen, setIsOpen] = useState(
-    defaultOpen ?? (state === "active" || state === "error")
-  );
+  const [isOpen, setIsOpen] = useState(defaultOpen ?? (state === "active" || state === "error"));
 
   // Update open state when phase becomes active
   const shouldOpen = state === "active" || state === "error";
@@ -82,7 +76,7 @@ export function TimelinePhase({
             state === "complete" && "from-green-500/50",
             state === "active" && cn(connectorColors[colorScheme], "animate-pulse"),
             state === "pending" && "from-muted",
-            state === "error" && "from-red-500/50"
+            state === "error" && "from-red-500/50",
           )}
         />
       )}
@@ -96,7 +90,7 @@ export function TimelinePhase({
               state === "pending" && "bg-muted/50 border-muted text-muted-foreground",
               state === "active" && cn(colorStyles[colorScheme], "bg-background"),
               state === "complete" && "bg-green-500/20 border-green-500 text-green-400",
-              state === "error" && "bg-red-500/20 border-red-500 text-red-400"
+              state === "error" && "bg-red-500/20 border-red-500 text-red-400",
             )}
           >
             {/* Pulse ring for active state */}
@@ -108,7 +102,7 @@ export function TimelinePhase({
                   colorScheme === "orange" && "bg-orange-500",
                   colorScheme === "purple" && "bg-purple-500",
                   colorScheme === "blue" && "bg-blue-500",
-                  colorScheme === "green" && "bg-green-500"
+                  colorScheme === "green" && "bg-green-500",
                 )}
               />
             )}
@@ -124,7 +118,7 @@ export function TimelinePhase({
                 type="button"
                 className={cn(
                   "w-full text-left group flex items-center justify-between py-2 px-3 -ml-3 rounded-lg transition-colors",
-                  "hover:bg-muted/50"
+                  "hover:bg-muted/50",
                 )}
               >
                 <div>
@@ -134,14 +128,12 @@ export function TimelinePhase({
                       state === "pending" && "text-muted-foreground",
                       state === "active" && colorStyles[colorScheme].split(" ")[0],
                       state === "complete" && "text-green-400",
-                      state === "error" && "text-red-400"
+                      state === "error" && "text-red-400",
                     )}
                   >
                     {title}
                   </h3>
-                  {subtitle && (
-                    <p className="text-sm text-muted-foreground">{subtitle}</p>
-                  )}
+                  {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
                 </div>
 
                 {/* State badge */}
@@ -153,7 +145,7 @@ export function TimelinePhase({
                         colorScheme === "yellow" && "bg-yellow-500/20 text-yellow-400",
                         colorScheme === "orange" && "bg-orange-500/20 text-orange-400",
                         colorScheme === "purple" && "bg-purple-500/20 text-purple-400",
-                        colorScheme === "blue" && "bg-blue-500/20 text-blue-400"
+                        colorScheme === "blue" && "bg-blue-500/20 text-blue-400",
                       )}
                     >
                       Active
@@ -172,7 +164,7 @@ export function TimelinePhase({
                   <span
                     className={cn(
                       "transition-transform text-muted-foreground",
-                      (shouldOpen || isOpen) && "rotate-90"
+                      (shouldOpen || isOpen) && "rotate-90",
                     )}
                   >
                     ▶
@@ -216,24 +208,15 @@ export function ThinkingIndicator({
       <span>{message}</span>
       <span className="flex gap-1">
         <span
-          className={cn(
-            "w-1.5 h-1.5 rounded-full animate-bounce",
-            dotColors[colorScheme]
-          )}
+          className={cn("w-1.5 h-1.5 rounded-full animate-bounce", dotColors[colorScheme])}
           style={{ animationDelay: "0ms" }}
         />
         <span
-          className={cn(
-            "w-1.5 h-1.5 rounded-full animate-bounce",
-            dotColors[colorScheme]
-          )}
+          className={cn("w-1.5 h-1.5 rounded-full animate-bounce", dotColors[colorScheme])}
           style={{ animationDelay: "150ms" }}
         />
         <span
-          className={cn(
-            "w-1.5 h-1.5 rounded-full animate-bounce",
-            dotColors[colorScheme]
-          )}
+          className={cn("w-1.5 h-1.5 rounded-full animate-bounce", dotColors[colorScheme])}
           style={{ animationDelay: "300ms" }}
         />
       </span>

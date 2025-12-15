@@ -10,11 +10,11 @@ import { db } from "@/db";
 import { repoSetups, trials, users } from "@/db/schema";
 import { decrypt } from "@/lib/encryption";
 import { requireUser } from "@/lib/session";
-import { runCodeBattle } from "@/lib/trial/code-battle/orchestrator";
-import { runLanista } from "@/lib/trial/lanista";
-import { runGladiators } from "@/lib/trial/gladiators";
 import { runArbiter } from "@/lib/trial/arbiter";
 import { broadcastTrialUpdate } from "@/lib/trial/broadcast";
+import { runCodeBattle } from "@/lib/trial/code-battle/orchestrator";
+import { runGladiators } from "@/lib/trial/gladiators";
+import { runLanista } from "@/lib/trial/lanista";
 
 /**
  * POST - Start a trial

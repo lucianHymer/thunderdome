@@ -117,9 +117,10 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
                 setMessages((prev) => {
                   const newMessages = [...prev];
                   // Use the last consul message if index is somehow wrong
-                  const idx = placeholderIndex >= 0 && placeholderIndex < prev.length
-                    ? placeholderIndex
-                    : prev.length - 1;
+                  const idx =
+                    placeholderIndex >= 0 && placeholderIndex < prev.length
+                      ? placeholderIndex
+                      : prev.length - 1;
                   newMessages[idx] = {
                     role: "consul",
                     content: accumulatedContent,
@@ -130,9 +131,10 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
                 // Handle error response from server
                 setMessages((prev) => {
                   const newMessages = [...prev];
-                  const idx = placeholderIndex >= 0 && placeholderIndex < prev.length
-                    ? placeholderIndex
-                    : prev.length - 1;
+                  const idx =
+                    placeholderIndex >= 0 && placeholderIndex < prev.length
+                      ? placeholderIndex
+                      : prev.length - 1;
                   newMessages[idx] = {
                     role: "consul",
                     content: `Error: ${parsed.message || "Unknown error occurred"}`,
@@ -249,7 +251,9 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
               >
                 <div
                   className={`max-w-[80%] rounded-lg p-3 ${
-                    message.role === "user" ? "bg-blue-600 text-white" : "bg-muted/50 text-foreground"
+                    message.role === "user"
+                      ? "bg-blue-600 text-white"
+                      : "bg-muted/50 text-foreground"
                   }`}
                 >
                   {message.role === "consul" && (
@@ -322,7 +326,12 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
             className="flex-1 min-h-[40px] max-h-[150px] resize-none bg-black/30 border-purple-500/50 text-foreground placeholder:text-muted-foreground focus:border-purple-400"
             rows={1}
           />
-          <Button onClick={sendMessage} disabled={!input.trim() || isStreaming} size="icon" className="shrink-0 bg-purple-600 hover:bg-purple-700 text-white">
+          <Button
+            onClick={sendMessage}
+            disabled={!input.trim() || isStreaming}
+            size="icon"
+            className="shrink-0 bg-purple-600 hover:bg-purple-700 text-white"
+          >
             {isStreaming ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (

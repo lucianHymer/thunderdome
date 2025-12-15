@@ -7,13 +7,13 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Markdown } from "@/components/ui/markdown";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Markdown } from "@/components/ui/markdown";
 import type { PhaseState } from "@/hooks/use-trial-phases";
-import { ThinkingIndicator } from "../timeline-phase";
 import { cn } from "@/lib/utils";
+import { ThinkingIndicator } from "../timeline-phase";
 
 interface Gladiator {
   id: string;
@@ -34,13 +34,7 @@ interface PhaseVerdictProps {
   error?: string;
 }
 
-export function PhaseVerdict({
-  state,
-  verdict,
-  gladiators,
-  scores,
-  error,
-}: PhaseVerdictProps) {
+export function PhaseVerdict({ state, verdict, gladiators, scores, error }: PhaseVerdictProps) {
   if (state === "pending") {
     return (
       <div className="text-muted-foreground text-sm">
@@ -75,11 +69,7 @@ export function PhaseVerdict({
 
   // Complete state - show verdict
   if (!verdict) {
-    return (
-      <div className="text-muted-foreground text-sm">
-        Verdict not available.
-      </div>
-    );
+    return <div className="text-muted-foreground text-sm">Verdict not available.</div>;
   }
 
   const winner = gladiators.find((g) => g.id === verdict.winnerGladiatorId);
@@ -131,9 +121,7 @@ export function PhaseVerdict({
                   key={gladiator.id}
                   className={cn(
                     "flex items-center justify-between rounded px-3 py-2 transition-all",
-                    isWinner
-                      ? "bg-yellow-500/10 border border-yellow-500/30"
-                      : "bg-muted/30"
+                    isWinner ? "bg-yellow-500/10 border border-yellow-500/30" : "bg-muted/30",
                   )}
                 >
                   <span className="flex items-center gap-2">
@@ -146,7 +134,7 @@ export function PhaseVerdict({
                   <span
                     className={cn(
                       "font-mono",
-                      isWinner ? "text-yellow-400" : "text-muted-foreground"
+                      isWinner ? "text-yellow-400" : "text-muted-foreground",
                     )}
                   >
                     {score !== undefined ? `${score.toFixed(1)}/100` : "N/A"}
@@ -161,9 +149,7 @@ export function PhaseVerdict({
       {/* Summary - show only the first paragraph, not full judge perspectives */}
       <div className="border border-green-500/20 rounded-lg bg-black/20 p-4 max-w-[700px] mx-auto">
         <h4 className="text-sm font-medium text-green-400 mb-3">Summary</h4>
-        <div className="text-sm text-foreground">
-          {verdict.summary.split(/\n\n##/)[0].trim()}
-        </div>
+        <div className="text-sm text-foreground">{verdict.summary.split(/\n\n##/)[0].trim()}</div>
       </div>
 
       {/* Judge Perspectives - collapsible */}
