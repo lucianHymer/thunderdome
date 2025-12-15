@@ -19,8 +19,14 @@ tar czf /tmp/thunderdome.tar.gz -C .next/standalone .
 echo "📤 Uploading..."
 scp /tmp/thunderdome.tar.gz $SERVER:/tmp/
 
+echo "📂 Preparing remote..."
+ssh $SERVER "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR"
+
 echo "📂 Extracting..."
-ssh $SERVER "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR && cd $REMOTE_DIR && tar xzf /tmp/thunderdome.tar.gz && rm /tmp/thunderdome.tar.gz"
+ssh $SERVER "cd $REMOTE_DIR && tar xzf /tmp/thunderdome.tar.gz"
+
+echo "🔍 Verifying..."
+ssh $SERVER "ls $REMOTE_DIR/server.js"
 
 # Env
 scp .env.production $SERVER:$REMOTE_DIR/.env 2>/dev/null || echo "No .env.production"
@@ -28,5 +34,6 @@ scp .env.production $SERVER:$REMOTE_DIR/.env 2>/dev/null || echo "No .env.produc
 echo "🔄 Starting..."
 ssh $SERVER "cd $REMOTE_DIR && pm2 delete thunderdome 2>/dev/null || true; pm2 start server.js --name thunderdome && pm2 save"
 
-rm /tmp/thunderdome.tar.gz
+ssh $SERVER "rm -f /tmp/thunderdome.tar.gz"
+rm -f /tmp/thunderdome.tar.gz
 echo "✅ https://enterthedome.xyz"
