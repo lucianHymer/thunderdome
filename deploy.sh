@@ -3,9 +3,6 @@ set -e
 
 SERVER="deploy@enterthedome.xyz"
 REMOTE_DIR="/home/deploy/thunderdome"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-cd "$SCRIPT_DIR"
 
 echo "⚡ Deploying Thunderdome"
 
@@ -17,13 +14,13 @@ cp -r .next/static .next/standalone/.next/
 [ -d public ] && cp -r public .next/standalone/
 
 echo "📦 Packaging..."
-cd .next/standalone
-tar czf /tmp/thunderdome.tar.gz .
-cd "$SCRIPT_DIR"
+# Use gtar if available (homebrew gnu-tar), otherwise tar
+TAR_CMD=$(command -v gtar || echo "tar")
+$TAR_CMD -czf /tmp/thunderdome.tar.gz --directory=.next/standalone .
 
-# Verify tar contents
+# Verify
 echo "🔍 Checking package..."
-tar tzf /tmp/thunderdome.tar.gz | grep server.js || { echo "ERROR: server.js not in tarball!"; exit 1; }
+$TAR_CMD -tzf /tmp/thunderdome.tar.gz | grep -E "^\./server\.js$" || { echo "ERROR: server.js not at root!"; $TAR_CMD -tzf /tmp/thunderdome.tar.gz | head -20; exit 1; }
 
 echo "📤 Uploading..."
 scp /tmp/thunderdome.tar.gz $SERVER:/tmp/
