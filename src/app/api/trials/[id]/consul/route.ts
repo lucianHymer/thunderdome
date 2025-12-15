@@ -4,14 +4,9 @@
  * POST /api/trials/:id/consul - Stream Consul conversation responses
  */
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import { createRequire } from "module";
-
-// Resolve CLI path dynamically to handle different deployment environments
-const require = createRequire(import.meta.url);
-const CLI_PATH = require.resolve("@anthropic-ai/claude-agent-sdk/cli.js");
+import { runAgent } from "@/lib/claude/agent";
 import { db } from "@/db";
 import { decrees, gladiators, judges, trials, users, verdicts } from "@/db/schema";
 import { decrypt } from "@/lib/encryption";
@@ -108,31 +103,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .join("\n\n")}\n\nUser: ${message}`;
     }
 
-    // Set up authentication token
-    const originalToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-    process.env.CLAUDE_CODE_OAUTH_TOKEN = claudeToken;
-
-    // Stream response from Claude
+    // Stream response using shared agent runner
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
           let fullResponse = "";
 
-          const agentStream = query({
-            prompt: conversationPrompt,
-            options: {
+          // Use the shared runAgent which handles CLI path and auth token
+          const agentStream = runAgent(
+            conversationPrompt,
+            {
               systemPrompt: `${systemPrompt}\n\n# Trial Context\n${trialContext}`,
               model: "sonnet",
               maxTurns: 5,
               allowedTools: [], // No tools for Consul
-              pathToClaudeCodeExecutable: CLI_PATH,
             },
-          });
+            claudeToken,
+          );
 
           for await (const event of agentStream) {
-            if (event.type === "stream_event") {
-              const streamEvent = event.event;
+            // runAgent yields "thinking" events containing raw stream data
+            if (event.type === "thinking") {
+              const streamEvent = event.content as any;
 
               // Handle content block delta for streaming text
               if (
@@ -178,13 +171,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           });
           controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
           controller.close();
-        } finally {
-          // Restore original token
-          if (originalToken) {
-            process.env.CLAUDE_CODE_OAUTH_TOKEN = originalToken;
-          } else {
-            delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
-          }
         }
       },
     });
