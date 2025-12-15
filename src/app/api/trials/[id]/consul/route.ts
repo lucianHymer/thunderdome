@@ -123,8 +123,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           );
 
           for await (const event of agentStream) {
-            console.log("[Consul] Event type:", event.type);
-
             // Handle assistant messages - extract text from the message object
             if (event.type === "assistant") {
               const msg = event.content as any;
@@ -140,9 +138,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 controller.enqueue(encoder.encode(`data: ${data}\n\n`));
               }
             } else if (event.type === "result") {
-              const resultMsg = event.content as any;
-              console.log("[Consul] Result keys:", Object.keys(resultMsg || {}));
-              console.log("[Consul] Result.result:", resultMsg?.result);
               // Store the conversation in the decrees table
               await db.insert(decrees).values({
                 trialId,
