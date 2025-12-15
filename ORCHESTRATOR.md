@@ -2,6 +2,56 @@
 
 > Instructions for the master orchestrator agent to build Thunderdome using parallel sub-agents
 
+---
+
+## 🚨 CRITICAL: SUB-AGENT USAGE RULES 🚨
+
+**READ THIS FIRST - DO NOT SKIP**
+
+### Rule 1: ALWAYS Use BLOCKING Sub-Agents
+
+When spawning sub-agents via the Task tool, **ALWAYS use blocking mode** (do NOT set `run_in_background: true`).
+
+**WHY?** Non-blocking agents require periodic status checks that rapidly fill orchestrator context with incremental results. This wastes your most valuable resource - orchestrator context.
+
+```
+✅ CORRECT: Spawn blocking sub-agents in parallel (single message, multiple Task calls)
+❌ WRONG: Spawn non-blocking sub-agents and poll for status
+```
+
+### Rule 2: Keep Orchestrator Context CLEAN
+
+The orchestrator's job is to:
+- Read issues and understand scope
+- Create worktrees
+- Spawn sub-agents with complete instructions
+- Receive completion reports
+- Test/verify results
+- Merge to main
+
+**DO NOT** do the actual implementation work in orchestrator context. That's what sub-agents are for.
+
+### Rule 3: Delegate Conflict Resolution to Sub-Agents
+
+When rebasing causes conflicts, spawn a sub-agent to resolve them:
+```
+"You are resolving merge conflicts in [worktree].
+The branch has been rebased on main and has conflicts.
+Resolve all conflicts, run npm run build to verify, then commit."
+```
+
+### Rule 4: Complete Instructions = Better Results
+
+Give sub-agents ALL context they need upfront:
+- Full issue content
+- Working directory path
+- Branch name
+- Environment variables
+- Any dependencies on other work
+- Expected deliverables
+
+---
+
 ## Your Mission
 
 You are the **Orchestrator**. Your job is to coordinate multiple sub-agents working in parallel to build Thunderdome. Each sub-agent works on a separate git worktree, and you are responsible for:
@@ -170,9 +220,14 @@ git rebase origin/main
 
 ## Wave-by-Wave Execution
 
-### Wave 1: Foundation (Issues 1, 2, 3)
+### Wave 1: Foundation (Issues 1, 2, 3) ✅ COMPLETE
 
 **Goal**: Project scaffolding, auth, and SDK wrapper
+
+**Status**: MERGED TO MAIN
+- PR #14: Issue 1 (Foundation) - merged
+- PR #15: Issue 2 (Auth) - merged
+- PR #16: Issue 3 (SDK) - merged
 
 **Create worktrees**:
 ```bash
