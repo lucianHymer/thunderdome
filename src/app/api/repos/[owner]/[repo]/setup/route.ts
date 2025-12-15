@@ -5,24 +5,24 @@
  * POST /api/repos/:owner/:repo/setup - Run setup discovery (streaming)
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { requireUser } from '@/lib/session';
-import { db } from '@/db';
-import { repoSetups, users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import { runSetupDiscovery } from '@/lib/setup/discovery';
-import { decrypt } from '@/lib/encryption';
-import type { StreamEvent } from '@/lib/claude/types';
+import { eq } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
+import { db } from "@/db";
+import { repoSetups, users } from "@/db/schema";
+import type { StreamEvent } from "@/lib/claude/types";
+import { decrypt } from "@/lib/encryption";
+import { requireUser } from "@/lib/session";
+import { runSetupDiscovery } from "@/lib/setup/discovery";
 
 /**
  * GET - Check if setup exists for a repository
  */
 export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ owner: string; repo: string }> }
+  _request: NextRequest,
+  { params }: { params: Promise<{ owner: string; repo: string }> },
 ) {
   try {
-    const user = await requireUser();
+    const _user = await requireUser();
     const { owner, repo } = await params;
     const repoUrl = `https://github.com/${owner}/${repo}`;
 
@@ -46,12 +46,8 @@ export async function GET(
         updatedAt: setup.updatedAt?.toISOString(),
       },
     });
-  } catch (error) {
-    console.error('Error checking setup:', error);
-    return NextResponse.json(
-      { error: 'Failed to check setup' },
-      { status: 500 }
-    );
+  } catch (_error) {
+    return NextResponse.json({ error: "Failed to check setup" }, { status: 500 });
   }
 }
 
@@ -68,7 +64,7 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ owner: string; repo: string }> }
+  { params }: { params: Promise<{ owner: string; repo: string }> },
 ) {
   try {
     const user = await requireUser();
@@ -76,16 +72,12 @@ export async function POST(
     const repoUrl = `https://github.com/${owner}/${repo}`;
 
     // Get user's Claude token
-    const [dbUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, user.id))
-      .limit(1);
+    const [dbUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
 
     if (!dbUser?.claudeToken) {
       return NextResponse.json(
-        { error: 'Claude API token not configured. Please set it in settings.' },
-        { status: 401 }
+        { error: "Claude API token not configured. Please set it in settings." },
+        { status: 401 },
       );
     }
 
@@ -94,11 +86,8 @@ export async function POST(
     const body = await request.json();
     const { workingDir, force = false } = body;
 
-    if (!workingDir || typeof workingDir !== 'string') {
-      return NextResponse.json(
-        { error: 'workingDir is required' },
-        { status: 400 }
-      );
+    if (!workingDir || typeof workingDir !== "string") {
+      return NextResponse.json({ error: "workingDir is required" }, { status: 400 });
     }
 
     // Check if setup already exists (unless force is true)
@@ -109,8 +98,8 @@ export async function POST(
 
       if (existingSetup) {
         return NextResponse.json(
-          { error: 'Setup already exists. Use force=true to re-run discovery.' },
-          { status: 409 }
+          { error: "Setup already exists. Use force=true to re-run discovery." },
+          { status: 409 },
         );
       }
     }
@@ -124,10 +113,10 @@ export async function POST(
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
-                type: 'start',
+                type: "start",
                 data: { repoUrl, workingDir },
-              })}\n\n`
-            )
+              })}\n\n`,
+            ),
           );
 
           // Run setup discovery with streaming
@@ -140,12 +129,12 @@ export async function POST(
               controller.enqueue(
                 encoder.encode(
                   `data: ${JSON.stringify({
-                    type: 'stream',
+                    type: "stream",
                     data: event,
-                  })}\n\n`
-                )
+                  })}\n\n`,
+                ),
               );
-            }
+            },
           );
 
           if (!result.success || !result.files) {
@@ -153,10 +142,10 @@ export async function POST(
             controller.enqueue(
               encoder.encode(
                 `data: ${JSON.stringify({
-                  type: 'error',
-                  data: { error: result.error || 'Setup discovery failed' },
-                })}\n\n`
-              )
+                  type: "error",
+                  data: { error: result.error || "Setup discovery failed" },
+                })}\n\n`,
+              ),
             );
             controller.close();
             return;
@@ -191,27 +180,26 @@ export async function POST(
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
-                type: 'complete',
+                type: "complete",
                 data: {
                   files: result.files,
                   cost: result.cost,
                 },
-              })}\n\n`
-            )
+              })}\n\n`,
+            ),
           );
 
           controller.close();
         } catch (error) {
-          console.error('Setup discovery error:', error);
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
-                type: 'error',
+                type: "error",
                 data: {
-                  error: error instanceof Error ? error.message : 'Unknown error',
+                  error: error instanceof Error ? error.message : "Unknown error",
                 },
-              })}\n\n`
-            )
+              })}\n\n`,
+            ),
           );
           controller.close();
         }
@@ -220,16 +208,12 @@ export async function POST(
 
     return new NextResponse(stream, {
       headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
       },
     });
-  } catch (error) {
-    console.error('Error in setup discovery API:', error);
-    return NextResponse.json(
-      { error: 'Failed to start setup discovery' },
-      { status: 500 }
-    );
+  } catch (_error) {
+    return NextResponse.json({ error: "Failed to start setup discovery" }, { status: 500 });
   }
 }

@@ -11,7 +11,7 @@
 export class TimeoutError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'TimeoutError';
+    this.name = "TimeoutError";
   }
 }
 
@@ -35,17 +35,13 @@ export class TimeoutError extends Error {
 export async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
-  errorMessage?: string
+  errorMessage?: string,
 ): Promise<T> {
   let timeoutId: NodeJS.Timeout;
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
-      reject(
-        new TimeoutError(
-          errorMessage || `Operation timed out after ${timeoutMs}ms`
-        )
-      );
+      reject(new TimeoutError(errorMessage || `Operation timed out after ${timeoutMs}ms`));
     }, timeoutMs);
   });
 
@@ -87,7 +83,7 @@ export async function withTimeout<T>(
 export async function* withStreamTimeout<T, TReturn = any>(
   generator: AsyncGenerator<T, TReturn, unknown>,
   timeoutMs: number,
-  errorMessage?: string
+  errorMessage?: string,
 ): AsyncGenerator<T, TReturn, unknown> {
   let timeoutId: NodeJS.Timeout | undefined;
   let isDone = false;
@@ -100,9 +96,8 @@ export async function* withStreamTimeout<T, TReturn = any>(
         timeoutId = setTimeout(() => {
           reject(
             new TimeoutError(
-              errorMessage ||
-                `Stream timed out waiting for next value after ${timeoutMs}ms`
-            )
+              errorMessage || `Stream timed out waiting for next value after ${timeoutMs}ms`,
+            ),
           );
         }, timeoutMs);
       });
@@ -163,7 +158,7 @@ export async function* withStreamTimeout<T, TReturn = any>(
 export async function* withTotalTimeout<T, TReturn = any>(
   generator: AsyncGenerator<T, TReturn, unknown>,
   timeoutMs: number,
-  errorMessage?: string
+  errorMessage?: string,
 ): AsyncGenerator<T, TReturn, unknown> {
   const startTime = Date.now();
   let finalReturn: TReturn | undefined;
@@ -172,9 +167,7 @@ export async function* withTotalTimeout<T, TReturn = any>(
     for await (const value of generator) {
       // Check if we've exceeded the timeout
       if (Date.now() - startTime > timeoutMs) {
-        throw new TimeoutError(
-          errorMessage || `Stream exceeded total timeout of ${timeoutMs}ms`
-        );
+        throw new TimeoutError(errorMessage || `Stream exceeded total timeout of ${timeoutMs}ms`);
       }
 
       yield value;

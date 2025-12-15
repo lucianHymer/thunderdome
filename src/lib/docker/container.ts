@@ -1,6 +1,6 @@
-import Docker from 'dockerode';
-import { Readable } from 'stream';
-import { getDockerClient } from './client';
+import type { Readable } from "node:stream";
+import type Docker from "dockerode";
+import { getDockerClient } from "./client";
 
 /**
  * Configuration for a trial container
@@ -52,14 +52,12 @@ export interface TrialContainer {
 const CONTAINER_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 const DEFAULT_MEMORY_LIMIT = 2 * 1024 * 1024 * 1024; // 2GB
 const DEFAULT_CPU_LIMIT = 1;
-const DEFAULT_IMAGE = 'node:20-alpine';
+const DEFAULT_IMAGE = "node:20-alpine";
 
 /**
  * Create a trial container with resource limits and security settings
  */
-export async function createTrialContainer(
-  config: TrialContainerConfig
-): Promise<TrialContainer> {
+export async function createTrialContainer(config: TrialContainerConfig): Promise<TrialContainer> {
   const docker = getDockerClient();
 
   const {
@@ -73,9 +71,7 @@ export async function createTrialContainer(
   // Pull image if not present
   try {
     await docker.pull(image);
-  } catch (error) {
-    console.warn(`Failed to pull image ${image}, will try to use local version:`, error);
-  }
+  } catch (_error) {}
 
   // Create container with security and resource constraints
   const container = await docker.createContainer({
@@ -86,20 +82,20 @@ export async function createTrialContainer(
     AttachStdout: true,
     AttachStderr: true,
     OpenStdin: false,
-    WorkingDir: '/workspace',
+    WorkingDir: "/workspace",
     HostConfig: {
       Memory: memoryLimit,
       MemorySwap: memoryLimit, // Prevent swap
       NanoCpus: cpuLimit * 1e9,
-      SecurityOpt: ['no-new-privileges'],
-      CapDrop: ['ALL'],
-      CapAdd: ['CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'SETGID', 'SETUID'], // Minimal capabilities
+      SecurityOpt: ["no-new-privileges"],
+      CapDrop: ["ALL"],
+      CapAdd: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"], // Minimal capabilities
       ReadonlyRootfs: false, // Need to write to workspace
       AutoRemove: false, // We'll handle removal manually
     },
     Labels: {
-      'thunderdome.trial-id': trialId,
-      'thunderdome.created-at': new Date().toISOString(),
+      "thunderdome.trial-id": trialId,
+      "thunderdome.created-at": new Date().toISOString(),
     },
   });
 
@@ -110,7 +106,6 @@ export async function createTrialContainer(
   // Auto-destroy after timeout
   const timeoutHandle = setTimeout(async () => {
     if (!isDestroyed) {
-      console.log(`Container ${container.id} for trial ${trialId} timed out, destroying...`);
       await destroyContainer(container);
       isDestroyed = true;
     }
@@ -120,14 +115,10 @@ export async function createTrialContainer(
     try {
       clearTimeout(timeoutHandle);
       await cont.stop({ t: 10 });
-    } catch (error) {
-      console.error('Error stopping container:', error);
-    }
+    } catch (_error) {}
     try {
       await cont.remove({ force: true });
-    } catch (error) {
-      console.error('Error removing container:', error);
-    }
+    } catch (_error) {}
   };
 
   return {
@@ -146,8 +137,8 @@ export async function createTrialContainer(
 
       const stream = await exec.start({ hijack: true, stdin: false });
 
-      let stdout = '';
-      let stderr = '';
+      let stdout = "";
+      let stderr = "";
 
       return new Promise((resolve, reject) => {
         // Demux the stream (Docker multiplexes stdout and stderr)
@@ -162,10 +153,10 @@ export async function createTrialContainer(
             write: (chunk: Buffer) => {
               stderr += chunk.toString();
             },
-          } as NodeJS.WritableStream
+          } as NodeJS.WritableStream,
         );
 
-        stream.on('end', async () => {
+        stream.on("end", async () => {
           try {
             const inspectResult = await exec.inspect();
             resolve({
@@ -178,7 +169,7 @@ export async function createTrialContainer(
           }
         });
 
-        stream.on('error', reject);
+        stream.on("error", reject);
       });
     },
 
@@ -194,9 +185,9 @@ export async function createTrialContainer(
     },
 
     async copyFileIn(localPath: string, containerPath: string): Promise<void> {
-      const fs = await import('fs');
-      const path = await import('path');
-      const tar = await import('tar-stream');
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      const tar = await import("tar-stream");
 
       const pack = tar.pack();
       const fileName = path.basename(containerPath);
@@ -212,32 +203,32 @@ export async function createTrialContainer(
     },
 
     async copyFileOut(containerPath: string, localPath: string): Promise<void> {
-      const fs = await import('fs');
-      const path = await import('path');
-      const tar = await import('tar-stream');
+      const fs = await import("node:fs");
+      const _path = await import("node:path");
+      const tar = await import("tar-stream");
 
       const stream = await container.getArchive({ path: containerPath });
       const extract = tar.extract();
 
       return new Promise((resolve, reject) => {
-        extract.on('entry', (header, entryStream, next) => {
+        extract.on("entry", (_header, entryStream, next) => {
           const chunks: Buffer[] = [];
 
-          entryStream.on('data', (chunk: Buffer) => {
+          entryStream.on("data", (chunk: Buffer) => {
             chunks.push(chunk);
           });
 
-          entryStream.on('end', () => {
+          entryStream.on("end", () => {
             fs.writeFileSync(localPath, Buffer.concat(chunks));
             next();
           });
 
-          entryStream.on('error', reject);
+          entryStream.on("error", reject);
           entryStream.resume();
         });
 
-        extract.on('finish', resolve);
-        extract.on('error', reject);
+        extract.on("finish", resolve);
+        extract.on("error", reject);
 
         stream.pipe(extract);
       });

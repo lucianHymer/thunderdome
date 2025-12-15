@@ -2,7 +2,7 @@
  * Zod schemas for Thunderdome agents (Lanista, Arbiter, Judges)
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * Schema for a single gladiator configuration
@@ -15,7 +15,7 @@ export const GladiatorSchema = z.object({
   persona: z.string().min(10),
 
   /** Claude model to use for this gladiator */
-  model: z.enum(['opus', 'sonnet', 'haiku']),
+  model: z.enum(["opus", "sonnet", "haiku"]),
 
   /** Temperature setting (0-1) */
   temperature: z.number().min(0).max(1),
@@ -39,8 +39,8 @@ export const LanistaOutputSchema = z.object({
   /** Array of configured gladiators to compete */
   gladiators: z
     .array(GladiatorSchema)
-    .min(2, 'Must have at least 2 gladiators')
-    .max(6, 'Cannot have more than 6 gladiators'),
+    .min(2, "Must have at least 2 gladiators")
+    .max(6, "Cannot have more than 6 gladiators"),
 });
 
 export type LanistaOutput = z.infer<typeof LanistaOutputSchema>;
@@ -71,8 +71,8 @@ export const ArbiterOutputSchema = z.object({
   /** Array of configured judges for evaluation */
   judges: z
     .array(JudgeSchema)
-    .min(1, 'Must have at least 1 judge')
-    .max(5, 'Cannot have more than 5 judges'),
+    .min(1, "Must have at least 1 judge")
+    .max(5, "Cannot have more than 5 judges"),
 });
 
 export type ArbiterOutput = z.infer<typeof ArbiterOutputSchema>;
@@ -124,7 +124,7 @@ export const AggregatedResultsSchema = z.object({
     z.object({
       judgeName: z.string(),
       output: JudgeOutputSchema,
-    })
+    }),
   ),
 
   /** Consensus ranking (aggregated from all judges) */
@@ -165,7 +165,7 @@ export const ThunderdomeSessionSchema = z.object({
       result: z.string(),
       cost: z.number(),
       duration: z.number(),
-    })
+    }),
   ),
 
   /** Aggregated evaluation results */

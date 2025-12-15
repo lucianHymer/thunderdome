@@ -2,9 +2,9 @@
  * Structured output functionality with Zod schema validation
  */
 
-import { z } from 'zod';
-import { runAgent } from './agent.js';
-import type { AgentConfig, StructuredResult, StreamEvent } from './types.js';
+import { z } from "zod";
+import { runAgent } from "./agent";
+import type { AgentConfig, StreamEvent, StructuredResult } from "./types";
 
 /**
  * Converts a Zod schema to JSON Schema format for the SDK
@@ -26,7 +26,7 @@ function zodToJsonSchema(schema: z.ZodType<any>): any {
     }
 
     return {
-      type: 'object',
+      type: "object",
       properties,
       required: required.length > 0 ? required : undefined,
       additionalProperties: false,
@@ -35,26 +35,26 @@ function zodToJsonSchema(schema: z.ZodType<any>): any {
 
   if (schema instanceof z.ZodArray) {
     return {
-      type: 'array',
+      type: "array",
       items: zodToJsonSchema(schema.element),
     };
   }
 
   if (schema instanceof z.ZodString) {
-    return { type: 'string' };
+    return { type: "string" };
   }
 
   if (schema instanceof z.ZodNumber) {
-    return { type: 'number' };
+    return { type: "number" };
   }
 
   if (schema instanceof z.ZodBoolean) {
-    return { type: 'boolean' };
+    return { type: "boolean" };
   }
 
   if (schema instanceof z.ZodEnum) {
     return {
-      type: 'string',
+      type: "string",
       enum: schema.options,
     };
   }
@@ -72,7 +72,7 @@ function zodToJsonSchema(schema: z.ZodType<any>): any {
   }
 
   // Fallback
-  return { type: 'string' };
+  return { type: "string" };
 }
 
 /**
@@ -128,7 +128,7 @@ export async function runStructuredAgent<T extends z.ZodType>(
   prompt: string,
   zodSchema: T,
   config: AgentConfig = {},
-  oauthToken?: string
+  oauthToken?: string,
 ): Promise<StructuredResult<z.infer<T>>> {
   // Convert Zod schema to JSON Schema
   const jsonSchema = zodToJsonSchema(zodSchema);
@@ -148,7 +148,7 @@ Provide your response as a JSON object. You can wrap it in a markdown code block
       ...config.additionalOptions,
       // SDK supports outputFormat for structured outputs
       outputFormat: {
-        type: 'json_schema',
+        type: "json_schema",
         schema: jsonSchema,
       },
     },
@@ -165,9 +165,9 @@ Provide your response as a JSON object. You can wrap it in a markdown code block
     }
 
     // Build result from events
-    const finalEvent = events.find((e) => e.type === 'result');
+    const finalEvent = events.find((e) => e.type === "result");
     if (!finalEvent) {
-      throw new Error('Agent execution did not produce a result');
+      throw new Error("Agent execution did not produce a result");
     }
 
     const resultContent = finalEvent.content as any;
@@ -180,14 +180,14 @@ Provide your response as a JSON object. You can wrap it in a markdown code block
       modelUsage: resultContent.modelUsage,
     };
 
-    const success = resultContent.subtype === 'success';
-    const content = resultContent.result || '';
+    const success = resultContent.subtype === "success";
+    const content = resultContent.result || "";
 
     if (!success) {
       return {
         success: false,
         cost,
-        error: resultContent.errors?.join(', ') || 'Agent execution failed',
+        error: resultContent.errors?.join(", ") || "Agent execution failed",
         rawContent: content,
       };
     }
@@ -202,7 +202,7 @@ Provide your response as a JSON object. You can wrap it in a markdown code block
       return {
         success: false,
         cost,
-        error: `Failed to parse JSON: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`,
+        error: `Failed to parse JSON: ${parseError instanceof Error ? parseError.message : "Unknown error"}`,
         rawContent: content,
       };
     }
@@ -233,7 +233,7 @@ Provide your response as a JSON object. You can wrap it in a markdown code block
         inputTokens: 0,
         outputTokens: 0,
       },
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : "Unknown error",
     };
   }
 }
@@ -253,7 +253,7 @@ export async function runStructuredAgentWithRetry<T extends z.ZodType>(
   zodSchema: T,
   config: AgentConfig = {},
   maxRetries: number = 2,
-  oauthToken?: string
+  oauthToken?: string,
 ): Promise<StructuredResult<z.infer<T>>> {
   let lastResult: StructuredResult<z.infer<T>> | undefined;
   let attempts = 0;

@@ -1,24 +1,26 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { checkDockerHealth } from '@/lib/docker/health';
-import { getAllTrialContainers } from '@/lib/trial/container-service';
+import { type NextRequest, NextResponse } from "next/server";
+import { checkDockerHealth } from "@/lib/docker/health";
+import { getAllTrialContainers } from "@/lib/trial/container-service";
 
 /**
  * GET /api/admin/health
  * Health check endpoint for Docker and trial containers
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const dockerHealth = await checkDockerHealth();
     const trialContainers = getAllTrialContainers();
 
-    const trialContainerInfo = Array.from(trialContainers.entries()).map(([trialId, container]) => ({
-      trialId,
-      containerId: container.id,
-      createdAt: container.createdAt.toISOString(),
-    }));
+    const trialContainerInfo = Array.from(trialContainers.entries()).map(
+      ([trialId, container]) => ({
+        trialId,
+        containerId: container.id,
+        createdAt: container.createdAt.toISOString(),
+      }),
+    );
 
     return NextResponse.json({
-      status: 'ok',
+      status: "ok",
       timestamp: new Date().toISOString(),
       docker: {
         available: dockerHealth.available,
@@ -33,13 +35,12 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Health check failed:', error);
     return NextResponse.json(
       {
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error',
+        status: "error",
+        error: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

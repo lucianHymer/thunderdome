@@ -101,15 +101,15 @@ export function buildArbiterUserPrompt(
     name: string;
     status: string;
     responseContent: string | null;
-  }>
+  }>,
 ): string {
   // Filter to only successful gladiators
   const successfulGladiators = gladiatorOutputs.filter(
-    (g) => g.status === 'COMPLETED' && g.responseContent
+    (g) => g.status === "COMPLETED" && g.responseContent,
   );
 
   if (successfulGladiators.length === 0) {
-    throw new Error('No successful gladiator outputs to evaluate');
+    throw new Error("No successful gladiator outputs to evaluate");
   }
 
   const outputsSection = successfulGladiators
@@ -121,9 +121,9 @@ export function buildArbiterUserPrompt(
 **Output**:
 ${g.responseContent}
 
----`
+---`,
     )
-    .join('\n\n');
+    .join("\n\n");
 
   return `# THE CHALLENGE
 

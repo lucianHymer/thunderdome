@@ -5,14 +5,14 @@
  * status banner, and verdict display.
  */
 
-'use client';
+"use client";
 
-import { useTrialStream } from '@/hooks/use-trial-stream';
-import { StatusBanner } from './status-banner';
-import { GladiatorPanel } from './gladiator-panel';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTrialStream } from "@/hooks/use-trial-stream";
+import { GladiatorPanel } from "./gladiator-panel";
+import { StatusBanner } from "./status-banner";
 
 interface Gladiator {
   id: string;
@@ -88,7 +88,7 @@ export function BattleView({ trial, gladiators, verdict }: BattleViewProps) {
               <div className="flex items-center gap-2">
                 <Badge className="bg-yellow-500 text-black">👑 Winner</Badge>
                 <span>
-                  {gladiators.find(g => g.id === verdict.winnerGladiatorId)?.name || 'Unknown'}
+                  {gladiators.find((g) => g.id === verdict.winnerGladiatorId)?.name || "Unknown"}
                 </span>
               </div>
             )}

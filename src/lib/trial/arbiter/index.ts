@@ -2,19 +2,18 @@
  * Arbiter runner - designs judges based on gladiator outputs
  */
 
-import { eq } from 'drizzle-orm';
-import { db } from '../../../db/index.js';
-import { trials, gladiators, judges } from '../../../db/schema.js';
+import { eq } from "drizzle-orm";
+import { db } from "../../../db/index";
+import { gladiators, judges, trials } from "../../../db/schema";
 import {
-  runStructuredAgentWithRetry,
-  ArbiterOutput,
+  type ArbiterOutput,
   ArbiterOutputSchema,
   MODELS,
-} from '../../claude/index.js';
-import { ARBITER_SYSTEM_PROMPT, buildArbiterUserPrompt } from './prompts.js';
-import { transitionTrialState } from '../state.js';
-import { broadcastTrialUpdate } from '../broadcast.js';
-import { StatusCallback } from '../types.js';
+  runStructuredAgentWithRetry,
+} from "../../claude/index";
+import { transitionTrialState } from "../state";
+import type { StatusCallback } from "../types";
+import { ARBITER_SYSTEM_PROMPT, buildArbiterUserPrompt } from "./prompts";
 
 /**
  * Runs the Arbiter to design judges based on gladiator outputs
@@ -27,7 +26,7 @@ import { StatusCallback } from '../types.js';
 export async function runArbiter(
   trialId: string,
   oauthToken: string,
-  onStatus?: StatusCallback
+  onStatus?: StatusCallback,
 ): Promise<ArbiterOutput> {
   try {
     // Fetch the trial
@@ -50,25 +49,25 @@ export async function runArbiter(
 
     // Check if we have any successful gladiators
     const successfulGladiators = gladiatorRecords.filter(
-      (g) => g.status === 'COMPLETED' && g.responseContent
+      (g) => g.status === "COMPLETED" && g.responseContent,
     );
 
     if (successfulGladiators.length === 0) {
-      throw new Error('No successful gladiator outputs to evaluate');
+      throw new Error("No successful gladiator outputs to evaluate");
     }
 
     // Transition to arbiter_designing state
-    await transitionTrialState(trialId, 'arbiter_designing', {
+    await transitionTrialState(trialId, "arbiter_designing", {
       successfulGladiators: successfulGladiators.length,
       totalGladiators: gladiatorRecords.length,
     });
 
     // Notify that Arbiter is thinking
     onStatus?.({
-      type: 'arbiter_thinking',
+      type: "arbiter_thinking",
       data: {
         trialId,
-        status: 'Arbiter is analyzing gladiator outputs and designing judges...',
+        status: "Arbiter is analyzing gladiator outputs and designing judges...",
         successfulGladiators: successfulGladiators.length,
       },
     });
@@ -81,7 +80,7 @@ export async function runArbiter(
         name: g.name,
         status: g.status,
         responseContent: g.responseContent,
-      }))
+      })),
     );
 
     // Run the Arbiter with structured output
@@ -93,14 +92,14 @@ export async function runArbiter(
         allowedTools: [], // Arbiter doesn't need tools, just reasoning
         maxTurns: 1, // Single-turn structured output
         systemPrompt: ARBITER_SYSTEM_PROMPT,
-        permissionMode: 'bypassPermissions',
+        permissionMode: "bypassPermissions",
       },
       2, // Max 2 retries for validation failures
-      oauthToken
+      oauthToken,
     );
 
     if (!result.success || !result.data) {
-      throw new Error(`Arbiter failed: ${result.error || 'No data returned'}`);
+      throw new Error(`Arbiter failed: ${result.error || "No data returned"}`);
     }
 
     const arbiterOutput = result.data;
@@ -119,7 +118,7 @@ export async function runArbiter(
 
     // Notify that Arbiter is complete
     onStatus?.({
-      type: 'arbiter_complete',
+      type: "arbiter_complete",
       data: {
         trialId,
         reasoning: arbiterOutput.reasoning,
@@ -144,7 +143,7 @@ export async function runArbiter(
 
     // Notify that judges have been created
     onStatus?.({
-      type: 'judges_created',
+      type: "judges_created",
       data: {
         trialId,
         judges: insertedJudges.map((j) => ({
@@ -156,16 +155,16 @@ export async function runArbiter(
     });
 
     // Transition to judging state
-    await transitionTrialState(trialId, 'judging', {
+    await transitionTrialState(trialId, "judging", {
       judgeCount: insertedJudges.length,
     });
 
     // Kick off judges (import dynamically to avoid circular dependency)
-    const { runJudges } = await import('../judges/index.js');
+    const { runJudges } = await import("../judges/index");
 
     // Notify that judging has started
     onStatus?.({
-      type: 'judging_started',
+      type: "judging_started",
       data: {
         trialId,
         judgeCount: insertedJudges.length,
@@ -173,29 +172,23 @@ export async function runArbiter(
     });
 
     // Run judges (this will handle verdict synthesis and state transitions)
-    await runJudges(
-      trialId,
-      insertedJudges,
-      successfulGladiators,
-      oauthToken,
-      onStatus
-    );
+    await runJudges(trialId, insertedJudges, successfulGladiators, oauthToken, onStatus);
 
     return arbiterOutput;
   } catch (error) {
     // Notify of error
     onStatus?.({
-      type: 'arbiter_error',
+      type: "arbiter_error",
       data: {
         trialId,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       },
     });
 
     // Update trial status to FAILED
-    await transitionTrialState(trialId, 'failed', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      phase: 'arbiter',
+    await transitionTrialState(trialId, "failed", {
+      error: error instanceof Error ? error.message : "Unknown error",
+      phase: "arbiter",
     });
 
     throw error;

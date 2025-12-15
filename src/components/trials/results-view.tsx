@@ -5,15 +5,15 @@
  * judge evaluations, and decree action buttons.
  */
 
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ConsulDialog } from './consul-dialog';
-import { ChevronDown, ChevronRight, Download, MessageSquare, Trophy } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, MessageSquare, Trophy } from "lucide-react";
+import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ConsulDialog } from "./consul-dialog";
 
 interface Gladiator {
   id: string;
@@ -78,10 +78,10 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
   const calculateAverageScore = (gladiatorId: string): number | null => {
     const scores: number[] = [];
 
-    judges.forEach(judge => {
+    judges.forEach((judge) => {
       const parsed = parseEvaluation(judge.evaluation);
       if (parsed) {
-        const evalData = parsed.evaluations.find(e => e.gladiatorId === gladiatorId);
+        const evalData = parsed.evaluations.find((e) => e.gladiatorId === gladiatorId);
         if (evalData) {
           scores.push(evalData.score);
         }
@@ -116,7 +116,7 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
     const response = await fetch(`/api/trials/${trialId}/export`);
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `trial-${trialId}-report.md`;
     document.body.appendChild(a);
@@ -137,16 +137,12 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-lg font-semibold">{verdict.summary}</p>
-          <div className="text-muted-foreground whitespace-pre-wrap">
-            {verdict.reasoning}
-          </div>
+          <div className="text-muted-foreground whitespace-pre-wrap">{verdict.reasoning}</div>
           {verdict.winnerGladiatorId && (
             <div className="flex items-center gap-2 pt-2">
-              <Badge className="bg-yellow-500 text-black font-semibold">
-                👑 Winner
-              </Badge>
+              <Badge className="bg-yellow-500 text-black font-semibold">👑 Winner</Badge>
               <span className="font-medium">
-                {gladiators.find(g => g.id === verdict.winnerGladiatorId)?.name || 'Unknown'}
+                {gladiators.find((g) => g.id === verdict.winnerGladiatorId)?.name || "Unknown"}
               </span>
             </div>
           )}
@@ -159,7 +155,7 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
           <CardTitle>Gladiator Responses</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {gladiators.map(gladiator => {
+          {gladiators.map((gladiator) => {
             const isWinner = verdict.winnerGladiatorId === gladiator.id;
             const avgScore = calculateAverageScore(gladiator.id);
             const isExpanded = expandedGladiators.has(gladiator.id);
@@ -170,7 +166,7 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
                 open={isExpanded}
                 onOpenChange={() => toggleGladiator(gladiator.id)}
               >
-                <Card className={isWinner ? 'border-yellow-500/50 bg-yellow-950/10' : ''}>
+                <Card className={isWinner ? "border-yellow-500/50 bg-yellow-950/10" : ""}>
                   <CollapsibleTrigger asChild>
                     <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
                       <div className="flex items-center justify-between">
@@ -186,9 +182,7 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
                           </CardTitle>
                         </div>
                         {avgScore !== null && (
-                          <Badge variant="outline">
-                            Avg Score: {avgScore.toFixed(1)}/10
-                          </Badge>
+                          <Badge variant="outline">Avg Score: {avgScore.toFixed(1)}/10</Badge>
                         )}
                       </div>
                     </CardHeader>
@@ -199,7 +193,7 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
                         <strong>Persona:</strong> {gladiator.persona}
                       </div>
                       <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap">
-                        {gladiator.responseContent || 'No response available'}
+                        {gladiator.responseContent || "No response available"}
                       </div>
                     </CardContent>
                   </CollapsibleContent>
@@ -216,7 +210,7 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
           <CardTitle>Judge Evaluations</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {judges.map(judge => {
+          {judges.map((judge) => {
             const isExpanded = expandedJudges.has(judge.id);
             const parsed = parseEvaluation(judge.evaluation);
 
@@ -255,15 +249,13 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
                               <strong>Summary:</strong> {parsed.summary}
                             </div>
                           )}
-                          {parsed.evaluations.map(evalData => {
-                            const gladiator = gladiators.find(g => g.id === evalData.gladiatorId);
+                          {parsed.evaluations.map((evalData) => {
+                            const gladiator = gladiators.find((g) => g.id === evalData.gladiatorId);
                             return (
                               <div key={evalData.gladiatorId} className="border-t pt-3">
                                 <div className="flex items-center justify-between mb-2">
                                   <h4 className="font-semibold">{gladiator?.name}</h4>
-                                  <Badge variant="outline">
-                                    Score: {evalData.score}/10
-                                  </Badge>
+                                  <Badge variant="outline">Score: {evalData.score}/10</Badge>
                                 </div>
                                 <div className="text-sm space-y-2">
                                   {evalData.strengths && evalData.strengths.length > 0 && (
@@ -298,7 +290,7 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
                         </>
                       ) : (
                         <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {judge.evaluation || 'No evaluation available'}
+                          {judge.evaluation || "No evaluation available"}
                         </div>
                       )}
                     </CardContent>
@@ -317,24 +309,15 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3">
-            <Button
-              onClick={() => setConsulOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
+            <Button onClick={() => setConsulOpen(true)} className="bg-blue-600 hover:bg-blue-700">
               <MessageSquare className="h-4 w-4 mr-2" />
               Consult the Consul
             </Button>
-            <Button
-              onClick={handleExport}
-              variant="outline"
-            >
+            <Button onClick={handleExport} variant="outline">
               <Download className="h-4 w-4 mr-2" />
               Export Report
             </Button>
-            <Button
-              onClick={() => window.location.href = '/trials/new'}
-              variant="outline"
-            >
+            <Button onClick={() => (window.location.href = "/trials/new")} variant="outline">
               New Trial
             </Button>
           </div>

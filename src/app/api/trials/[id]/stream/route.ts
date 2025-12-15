@@ -4,30 +4,23 @@
  * GET /api/trials/:id/stream - Server-sent events endpoint for trial updates
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/session";
+import { eq } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { trials } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { requireUser } from "@/lib/session";
 import { subscribeToTrial } from "@/lib/trial/broadcast";
 
 /**
  * GET - Stream trial updates via Server-Sent Events
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireUser();
     const { id: trialId } = await params;
 
     // Get the trial and verify ownership
-    const [trial] = await db
-      .select()
-      .from(trials)
-      .where(eq(trials.id, trialId))
-      .limit(1);
+    const [trial] = await db.select().from(trials).where(eq(trials.id, trialId)).limit(1);
 
     if (!trial) {
       return NextResponse.json({ error: "Trial not found" }, { status: 404 });
@@ -70,8 +63,7 @@ export async function GET(
             if (done) break;
             controller.enqueue(value);
           }
-        } catch (error) {
-          console.error("Stream error:", error);
+        } catch (_error) {
         } finally {
           controller.close();
         }
@@ -86,11 +78,7 @@ export async function GET(
         Connection: "keep-alive",
       },
     });
-  } catch (error) {
-    console.error("Error creating SSE stream:", error);
-    return NextResponse.json(
-      { error: "Failed to create stream" },
-      { status: 500 }
-    );
+  } catch (_error) {
+    return NextResponse.json({ error: "Failed to create stream" }, { status: 500 });
   }
 }

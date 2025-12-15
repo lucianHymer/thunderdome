@@ -39,7 +39,7 @@ export function ClaudeTokenForm({ hasToken: initialHasToken }: ClaudeTokenFormPr
         const data = await response.json();
         setMessage({ type: "error", text: data.error || "Failed to save token" });
       }
-    } catch (error) {
+    } catch (_error) {
       setMessage({ type: "error", text: "Network error. Please try again." });
     } finally {
       setLoading(false);
@@ -66,7 +66,7 @@ export function ClaudeTokenForm({ hasToken: initialHasToken }: ClaudeTokenFormPr
         const data = await response.json();
         setMessage({ type: "error", text: data.error || "Failed to remove token" });
       }
-    } catch (error) {
+    } catch (_error) {
       setMessage({ type: "error", text: "Network error. Please try again." });
     } finally {
       setLoading(false);
@@ -78,9 +78,7 @@ export function ClaudeTokenForm({ hasToken: initialHasToken }: ClaudeTokenFormPr
       {message && (
         <div
           className={`p-3 rounded ${
-            message.type === "success"
-              ? "bg-green-100 text-green-800"
-              : "bg-red-100 text-red-800"
+            message.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
           }`}
         >
           {message.text}
@@ -90,9 +88,7 @@ export function ClaudeTokenForm({ hasToken: initialHasToken }: ClaudeTokenFormPr
       {hasToken ? (
         <div className="space-y-4">
           <div className="p-3 bg-green-50 border border-green-200 rounded">
-            <p className="text-sm text-green-800">
-              ✓ Claude API token is configured
-            </p>
+            <p className="text-sm text-green-800">✓ Claude API token is configured</p>
           </div>
           <button
             onClick={handleRemove}

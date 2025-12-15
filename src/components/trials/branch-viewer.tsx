@@ -6,9 +6,9 @@
  * Shows gladiator branches with GitHub links and PR creation
  */
 
+import { ExternalLink, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ExternalLink, GitBranch } from "lucide-react";
 
 interface BranchViewerProps {
   repoUrl: string;
@@ -21,11 +21,7 @@ interface BranchViewerProps {
   winnerId: string | null;
 }
 
-export function BranchViewer({
-  repoUrl,
-  gladiators,
-  winnerId,
-}: BranchViewerProps) {
+export function BranchViewer({ repoUrl, gladiators, winnerId }: BranchViewerProps) {
   // Parse repo URL to build GitHub links
   const repoPath = new URL(repoUrl).pathname.slice(1);
 

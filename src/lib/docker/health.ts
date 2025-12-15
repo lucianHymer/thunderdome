@@ -1,4 +1,4 @@
-import { getDockerClient } from './client';
+import { getDockerClient } from "./client";
 
 export interface DockerHealthInfo {
   available: boolean;
@@ -22,20 +22,18 @@ export async function checkDockerHealth(): Promise<DockerHealthInfo> {
 
     // Calculate total memory usage from running containers
     let totalMemoryUsage = 0;
-    const runningContainers = containers.filter((c) => c.State === 'running');
+    const runningContainers = containers.filter((c) => c.State === "running");
 
     for (const containerInfo of runningContainers) {
       try {
         const container = docker.getContainer(containerInfo.Id);
         const stats = await container.stats({ stream: false });
 
-        if (stats && typeof stats === 'object' && 'memory_stats' in stats) {
+        if (stats && typeof stats === "object" && "memory_stats" in stats) {
           const memoryStats = stats.memory_stats as { usage?: number };
           totalMemoryUsage += memoryStats.usage || 0;
         }
-      } catch (error) {
-        console.warn(`Failed to get stats for container ${containerInfo.Id}:`, error);
-      }
+      } catch (_error) {}
     }
 
     return {
@@ -48,7 +46,7 @@ export async function checkDockerHealth(): Promise<DockerHealthInfo> {
       available: false,
       containerCount: 0,
       memoryUsage: 0,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : "Unknown error",
     };
   }
 }

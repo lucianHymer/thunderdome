@@ -4,19 +4,19 @@
  * Form for creating a new trial with challenge prompt and type selection.
  */
 
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 
 export function NewTrialForm() {
   const router = useRouter();
-  const [challengePrompt, setChallengePrompt] = useState('');
-  const [trialType, setTrialType] = useState<'GLADIATOR' | 'LEGION'>('GLADIATOR');
+  const [challengePrompt, setChallengePrompt] = useState("");
+  const [trialType, setTrialType] = useState<"GLADIATOR" | "LEGION">("GLADIATOR");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,16 +25,16 @@ export function NewTrialForm() {
     setError(null);
 
     if (!challengePrompt.trim()) {
-      setError('Please enter a challenge prompt');
+      setError("Please enter a challenge prompt");
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/trials', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/trials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           challengePrompt,
           trialType,
@@ -43,13 +43,13 @@ export function NewTrialForm() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Failed to create trial');
+        throw new Error(data.error || "Failed to create trial");
       }
 
       const { trialId } = await response.json();
       router.push(`/trials/${trialId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create trial');
+      setError(err instanceof Error ? err.message : "Failed to create trial");
       setIsSubmitting(false);
     }
   };
@@ -75,7 +75,10 @@ export function NewTrialForm() {
 
       <div>
         <Label className="text-lg font-semibold mb-2 block">Trial Type</Label>
-        <RadioGroup value={trialType} onValueChange={(v) => setTrialType(v as 'GLADIATOR' | 'LEGION')}>
+        <RadioGroup
+          value={trialType}
+          onValueChange={(v) => setTrialType(v as "GLADIATOR" | "LEGION")}
+        >
           <div className="flex items-start space-x-3 border border-border rounded-lg p-4">
             <RadioGroupItem value="GLADIATOR" id="gladiator" />
             <div className="flex-1">
@@ -83,7 +86,8 @@ export function NewTrialForm() {
                 ⚔️ Gladiator (Ideation)
               </Label>
               <p className="text-sm text-muted-foreground">
-                Multiple AI agents compete to solve the same challenge. Best for exploring different approaches.
+                Multiple AI agents compete to solve the same challenge. Best for exploring different
+                approaches.
               </p>
             </div>
           </div>
@@ -114,7 +118,7 @@ export function NewTrialForm() {
         className="w-full bg-orange-600 hover:bg-orange-700"
         size="lg"
       >
-        {isSubmitting ? 'Creating Trial...' : '⚔️ Start Battle'}
+        {isSubmitting ? "Creating Trial..." : "⚔️ Start Battle"}
       </Button>
     </form>
   );

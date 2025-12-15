@@ -5,30 +5,23 @@
  * DELETE /api/trials/:id - Delete pending trials only
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/session";
+import { eq } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { trials, gladiators, judges, verdicts, decrees } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { decrees, gladiators, judges, trials, verdicts } from "@/db/schema";
+import { requireUser } from "@/lib/session";
 import { closeTrialSubscriptions } from "@/lib/trial/broadcast";
 
 /**
  * GET - Get a single trial with all related data
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireUser();
     const { id: trialId } = await params;
 
     // Get the trial
-    const [trial] = await db
-      .select()
-      .from(trials)
-      .where(eq(trials.id, trialId))
-      .limit(1);
+    const [trial] = await db.select().from(trials).where(eq(trials.id, trialId)).limit(1);
 
     if (!trial) {
       return NextResponse.json({ error: "Trial not found" }, { status: 404 });
@@ -46,10 +39,7 @@ export async function GET(
       .where(eq(gladiators.trialId, trialId));
 
     // Get related judges
-    const trialJudges = await db
-      .select()
-      .from(judges)
-      .where(eq(judges.trialId, trialId));
+    const trialJudges = await db.select().from(judges).where(eq(judges.trialId, trialId));
 
     // Get verdict if exists
     const [verdict] = await db
@@ -59,10 +49,7 @@ export async function GET(
       .limit(1);
 
     // Get decrees
-    const trialDecrees = await db
-      .select()
-      .from(decrees)
-      .where(eq(decrees.trialId, trialId));
+    const trialDecrees = await db.select().from(decrees).where(eq(decrees.trialId, trialId));
 
     // Return complete trial data
     return NextResponse.json({
@@ -74,12 +61,8 @@ export async function GET(
         decrees: trialDecrees,
       },
     });
-  } catch (error) {
-    console.error("Error getting trial:", error);
-    return NextResponse.json(
-      { error: "Failed to get trial" },
-      { status: 500 }
-    );
+  } catch (_error) {
+    return NextResponse.json({ error: "Failed to get trial" }, { status: 500 });
   }
 }
 
@@ -87,19 +70,15 @@ export async function GET(
  * DELETE - Delete a trial (only if PENDING)
  */
 export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const user = await requireUser();
     const { id: trialId } = await params;
 
     // Get the trial
-    const [trial] = await db
-      .select()
-      .from(trials)
-      .where(eq(trials.id, trialId))
-      .limit(1);
+    const [trial] = await db.select().from(trials).where(eq(trials.id, trialId)).limit(1);
 
     if (!trial) {
       return NextResponse.json({ error: "Trial not found" }, { status: 404 });
@@ -112,10 +91,7 @@ export async function DELETE(
 
     // Only allow deleting pending trials
     if (trial.status !== "PENDING") {
-      return NextResponse.json(
-        { error: "Can only delete pending trials" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Can only delete pending trials" }, { status: 400 });
     }
 
     // Delete the trial (cascade will handle related records)
@@ -125,11 +101,7 @@ export async function DELETE(
     closeTrialSubscriptions(trialId);
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Error deleting trial:", error);
-    return NextResponse.json(
-      { error: "Failed to delete trial" },
-      { status: 500 }
-    );
+  } catch (_error) {
+    return NextResponse.json({ error: "Failed to delete trial" }, { status: 500 });
   }
 }

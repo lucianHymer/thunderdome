@@ -5,11 +5,11 @@
  * Protected route - requires authentication.
  */
 
-import { requireUser } from "@/lib/session";
+import { eq } from "drizzle-orm";
 import { ClaudeTokenForm } from "@/components/auth/claude-token-form";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { requireUser } from "@/lib/session";
 
 export default async function SettingsPage() {
   const user = await requireUser();
@@ -31,8 +31,8 @@ export default async function SettingsPage() {
         <section className="border rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4">Claude API Token</h2>
           <p className="text-gray-600 mb-6">
-            Your Claude API token is used to run AI battles. It will be stored
-            encrypted and never shared.
+            Your Claude API token is used to run AI battles. It will be stored encrypted and never
+            shared.
           </p>
 
           <ClaudeTokenForm hasToken={hasToken} />

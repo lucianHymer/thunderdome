@@ -19,10 +19,10 @@ export function buildGladiatorSystemPrompt(
   gladiatorName: string,
   persona: string,
   focus: string,
-  trialType: 'GLADIATOR' | 'LEGION'
+  trialType: "GLADIATOR" | "LEGION",
 ): string {
   const competitionMode =
-    trialType === 'GLADIATOR'
+    trialType === "GLADIATOR"
       ? `You are competing against other AI agents with different approaches. Your solution will be judged against theirs.`
       : `You are part of a team (Legion) working together. Your contribution will be evaluated as part of the collective effort.`;
 
@@ -78,16 +78,16 @@ export function buildCodeBattlePrompt(
   gladiatorName: string,
   persona: string,
   focus: string,
-  trialType: 'GLADIATOR' | 'LEGION',
+  trialType: "GLADIATOR" | "LEGION",
   repoContext?: string,
-  workingDirectory?: string
+  workingDirectory?: string,
 ): string {
   const basePrompt = buildGladiatorSystemPrompt(
     challenge,
     gladiatorName,
     persona,
     focus,
-    trialType
+    trialType,
   );
 
   const contextSection = repoContext
@@ -98,7 +98,7 @@ export function buildCodeBattlePrompt(
 ${repoContext}
 
 `
-    : '';
+    : "";
 
   const directorySection = workingDirectory
     ? `
@@ -109,7 +109,7 @@ Your work should be done in: ${workingDirectory}
 
 All file paths should be relative to this directory or absolute.
 `
-    : '';
+    : "";
 
   return `${basePrompt}${contextSection}${directorySection}`;
 }
@@ -129,15 +129,9 @@ export function buildTaskPrompt(
   gladiatorName: string,
   persona: string,
   focus: string,
-  trialType: 'GLADIATOR' | 'LEGION'
+  trialType: "GLADIATOR" | "LEGION",
 ): string {
-  return buildGladiatorSystemPrompt(
-    challenge,
-    gladiatorName,
-    persona,
-    focus,
-    trialType
-  );
+  return buildGladiatorSystemPrompt(challenge, gladiatorName, persona, focus, trialType);
 }
 
 /**
@@ -146,5 +140,5 @@ export function buildTaskPrompt(
  * This is intentionally simple - the system prompt contains the context.
  */
 export function buildGladiatorUserPrompt(): string {
-  return 'Begin your work on the challenge described in your mission.';
+  return "Begin your work on the challenge described in your mission.";
 }

@@ -2,14 +2,8 @@
  * Core agent execution functionality
  */
 
-import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import type {
-  AgentConfig,
-  AgentResult,
-  StreamEvent,
-  StreamEventType,
-  CostInfo,
-} from './types.js';
+import { type Options, query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentConfig, AgentResult, CostInfo, StreamEvent } from "./types";
 
 /**
  * Processes an SDK message into a StreamEvent
@@ -18,10 +12,10 @@ function processMessage(message: SDKMessage): StreamEvent | null {
   const timestamp = new Date();
 
   switch (message.type) {
-    case 'system':
-      if (message.subtype === 'init') {
+    case "system":
+      if (message.subtype === "init") {
         return {
-          type: 'init',
+          type: "init",
           content: {
             sessionId: message.session_id,
             model: message.model,
@@ -39,9 +33,9 @@ function processMessage(message: SDKMessage): StreamEvent | null {
       }
       return null;
 
-    case 'assistant':
+    case "assistant":
       return {
-        type: 'assistant',
+        type: "assistant",
         content: message.message,
         timestamp,
         metadata: {
@@ -50,9 +44,9 @@ function processMessage(message: SDKMessage): StreamEvent | null {
         },
       };
 
-    case 'user':
+    case "user":
       return {
-        type: 'user',
+        type: "user",
         content: message.message,
         timestamp,
         metadata: {
@@ -61,9 +55,9 @@ function processMessage(message: SDKMessage): StreamEvent | null {
         },
       };
 
-    case 'stream_event':
+    case "stream_event":
       return {
-        type: 'thinking',
+        type: "thinking",
         content: message.event,
         timestamp,
         metadata: {
@@ -72,9 +66,9 @@ function processMessage(message: SDKMessage): StreamEvent | null {
         },
       };
 
-    case 'result':
+    case "result":
       return {
-        type: 'result',
+        type: "result",
         content: message,
         timestamp,
         metadata: {
@@ -124,7 +118,7 @@ function extractCostInfo(result: any): CostInfo {
 export async function* runAgent(
   prompt: string,
   config: AgentConfig = {},
-  oauthToken?: string
+  oauthToken?: string,
 ): AsyncGenerator<StreamEvent, AgentResult, unknown> {
   const events: StreamEvent[] = [];
   let sessionId: string | undefined;
@@ -166,12 +160,12 @@ export async function* runAgent(
         events.push(event);
 
         // Capture session ID from init event
-        if (event.type === 'init' && event.content.sessionId) {
+        if (event.type === "init" && event.content.sessionId) {
           sessionId = event.content.sessionId;
         }
 
         // Store final result message
-        if (event.type === 'result') {
+        if (event.type === "result") {
           finalResult = event.content;
         }
 
@@ -180,25 +174,25 @@ export async function* runAgent(
     }
 
     // Build final result
-    const cost = finalResult ? extractCostInfo(finalResult) : {
-      totalUsd: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-    };
+    const cost = finalResult
+      ? extractCostInfo(finalResult)
+      : {
+          totalUsd: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+        };
 
     agentResult = {
-      success: finalResult?.subtype === 'success',
-      content: finalResult?.result || '',
+      success: finalResult?.subtype === "success",
+      content: finalResult?.result || "",
       events,
       cost,
       turns: finalResult?.num_turns || 0,
       sessionId,
       durationMs: finalResult?.duration_ms,
-      maxTurnsReached: finalResult?.subtype === 'error_max_turns',
-      budgetExceeded: finalResult?.subtype === 'error_max_budget_usd',
-      error: finalResult?.is_error
-        ? finalResult.errors?.join(', ') || 'Unknown error'
-        : undefined,
+      maxTurnsReached: finalResult?.subtype === "error_max_turns",
+      budgetExceeded: finalResult?.subtype === "error_max_budget_usd",
+      error: finalResult?.is_error ? finalResult.errors?.join(", ") || "Unknown error" : undefined,
     };
 
     return agentResult;
@@ -233,7 +227,7 @@ export async function* runAgent(
 export async function runAgentSimple(
   prompt: string,
   config: AgentConfig = {},
-  oauthToken?: string
+  oauthToken?: string,
 ): Promise<AgentResult> {
   // Store the final result by consuming the generator
   const events: StreamEvent[] = [];
@@ -248,9 +242,9 @@ export async function runAgentSimple(
 
   // The generator automatically returns the AgentResult when done
   // We can access it from the last result
-  const finalEvent = events.find((e) => e.type === 'result');
+  const finalEvent = events.find((e) => e.type === "result");
   if (!finalEvent) {
-    throw new Error('Agent execution did not produce a result');
+    throw new Error("Agent execution did not produce a result");
   }
 
   // Build AgentResult from events
@@ -258,17 +252,15 @@ export async function runAgentSimple(
   const cost = extractCostInfo(resultContent);
 
   return {
-    success: resultContent.subtype === 'success',
-    content: resultContent.result || '',
+    success: resultContent.subtype === "success",
+    content: resultContent.result || "",
     events,
     cost,
     turns: resultContent.num_turns || 0,
     sessionId: finalEvent.metadata?.sessionId,
     durationMs: resultContent.duration_ms,
-    maxTurnsReached: resultContent.subtype === 'error_max_turns',
-    budgetExceeded: resultContent.subtype === 'error_max_budget_usd',
-    error: resultContent.is_error
-      ? resultContent.errors?.join(', ') || 'Unknown error'
-      : undefined,
+    maxTurnsReached: resultContent.subtype === "error_max_turns",
+    budgetExceeded: resultContent.subtype === "error_max_budget_usd",
+    error: resultContent.is_error ? resultContent.errors?.join(", ") || "Unknown error" : undefined,
   };
 }

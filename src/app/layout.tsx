@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/session";
-import { UserMenu } from "@/components/auth/user-menu";
 import { SignInButton } from "@/components/auth/sign-in-button";
+import { UserMenu } from "@/components/auth/user-menu";
+import { getCurrentUser } from "@/lib/session";
 
 const inter = Inter({ subsets: ["latin"] });
 

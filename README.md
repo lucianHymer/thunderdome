@@ -1,284 +1,328 @@
-# Thunderdome
+# ⚡ Thunderdome
 
-AI agent orchestration platform powered by the Claude Agent SDK.
+> *Many gladiators enter. One answer leaves.*
 
-## Overview
+A multi-agent AI battle arena where Claude instances compete to solve challenges, judged by AI arbiters, with you as the final Editor.
 
-Thunderdome provides a competitive multi-agent system where different AI "gladiators" compete to solve tasks, with specialized judges evaluating their work. This implementation wraps the Claude Agent SDK to provide:
+## What is Thunderdome?
 
-- **Streaming agent execution** with real-time event handling
-- **Parallel agent coordination** for running multiple agents concurrently
-- **Structured output validation** using Zod schemas
-- **Cost tracking and token management** across all agent operations
+Instead of asking one LLM for an answer, Thunderdome orchestrates competitive AI problem-solving. The **Lanista** (AI competition designer) spawns multiple Claude "gladiators" with different perspectives to attack your problem. Judges evaluate their responses, and you—the **Editor**—make the final call.
 
-## Architecture
+**The key insight:** Diversity of approach surfaces better solutions. Multiple perspectives beat a single query.
 
-### Core Components
+## Quick Start
 
-#### 1. Agent Execution (`src/lib/claude/agent.ts`)
-- `runAgent()`: Streaming execution with typed events
-- `runAgentSimple()`: Non-streaming execution for simple use cases
-- OAuth token management and injection
-- Event processing and cost aggregation
+### Prerequisites
 
-#### 2. Parallel Execution (`src/lib/claude/parallel.ts`)
-- `runAgentsParallel()`: Real-time streaming from multiple agents
-- `runAgentsParallelBatch()`: Simplified parallel execution
-- Promise.race-based coordination for concurrent agents
+- Node.js 18+
+- Docker (for running gladiator containers)
+- GitHub account (for OAuth)
+- Claude API token (per-user)
 
-#### 3. Structured Output (`src/lib/claude/structured.ts`)
-- `runStructuredAgent()`: Zod schema-validated responses
-- `runStructuredAgentWithRetry()`: Automatic retry on validation failures
-- JSON extraction from markdown code blocks
-
-#### 4. Schemas (`src/lib/claude/schemas.ts`)
-Complete Zod schemas for the Thunderdome system:
-- **LanistaOutputSchema**: Gladiator selection and configuration
-- **ArbiterOutputSchema**: Judge selection and configuration
-- **JudgeOutputSchema**: Evaluation results with scores and rankings
-- **ThunderdomeSessionSchema**: Complete session tracking
-
-#### 5. Type System (`src/lib/claude/types.ts`)
-Comprehensive TypeScript types:
-- `AgentConfig`: Agent configuration options
-- `StreamEvent`: Event emitted during execution
-- `AgentResult`: Final execution results
-- `CostInfo`: Token usage and cost tracking
-
-## Installation
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/your-org/thunderdome.git
+cd thunderdome
+
+# Install dependencies
 npm install
+
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your credentials (see Environment Variables below)
+nano .env
+
+# Set up the database
+npm run db:push
+
+# Start development server
+npm run dev
 ```
 
-## Authentication
+Visit `http://localhost:3000` and sign in with GitHub.
 
-Set either of these environment variables:
+## Environment Variables
+
+Required environment variables in `.env`:
 
 ```bash
-# Anthropic API key (recommended)
-export ANTHROPIC_API_KEY=your-api-key
+# Database
+DATABASE_URL=./thunderdome.db
 
-# Or Claude Code OAuth token
-export CLAUDE_CODE_OAUTH_TOKEN=your-oauth-token
+# GitHub OAuth (create app at github.com/settings/developers)
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
+
+# NextAuth.js
+NEXTAUTH_SECRET=your_random_secret_string
+NEXTAUTH_URL=http://localhost:3000
+
+# Encryption (for storing user Claude tokens)
+# Generate with: openssl rand -hex 32
+ENCRYPTION_KEY=your_encryption_key_64_chars
+
+# Optional: Claude API key for system operations
+ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
-## Usage Examples
+### Getting Credentials
 
-### Basic Agent Execution
+1. **GitHub OAuth:** Create an OAuth App at https://github.com/settings/developers
+   - Homepage URL: `http://localhost:3000`
+   - Callback URL: `http://localhost:3000/api/auth/callback/github`
 
-```typescript
-import { runAgent, TOOL_SETS } from './src/lib/claude/index.js';
+2. **NextAuth Secret:** Generate with `openssl rand -base64 32`
 
-// Streaming execution
-for await (const event of runAgent("Find all TODO comments", {
-  allowedTools: TOOL_SETS.READ_ONLY,
-  maxTurns: 5
-})) {
-  console.log(event.type, event.content);
-}
-```
+3. **Encryption Key:** Generate with `openssl rand -hex 32`
 
-### Non-Streaming Execution
+4. **Claude API Token:** Each user provides their own token in Settings after login
 
-```typescript
-import { runAgentSimple } from './src/lib/claude/index.js';
-
-const result = await runAgentSimple("Analyze this code", {
-  allowedTools: ['Read', 'Grep'],
-  model: 'claude-sonnet-4',
-});
-
-console.log(result.content);
-console.log(`Cost: $${result.cost.totalUsd.toFixed(4)}`);
-```
-
-### Parallel Agent Execution
-
-```typescript
-import { runAgentsParallelBatch } from './src/lib/claude/index.js';
-
-const results = await runAgentsParallelBatch([
-  {
-    id: 'finder',
-    prompt: 'Find all security issues',
-    allowedTools: ['Read', 'Grep'],
-  },
-  {
-    id: 'analyzer',
-    prompt: 'Analyze code complexity',
-    allowedTools: ['Read', 'Glob'],
-  },
-]);
-
-console.log(results.get('finder')?.content);
-console.log(results.get('analyzer')?.content);
-```
-
-### Structured Output with Zod
-
-```typescript
-import { z } from 'zod';
-import { runStructuredAgent } from './src/lib/claude/index.js';
-
-const BugSchema = z.object({
-  bugs: z.array(z.object({
-    file: z.string(),
-    line: z.number(),
-    severity: z.enum(['low', 'medium', 'high']),
-    description: z.string(),
-  })),
-});
-
-const result = await runStructuredAgent(
-  "Find all bugs in the codebase and report them as JSON",
-  BugSchema,
-  { allowedTools: ['Read', 'Grep'] }
-);
-
-if (result.success) {
-  result.data.bugs.forEach(bug => {
-    console.log(`${bug.file}:${bug.line} - ${bug.severity}: ${bug.description}`);
-  });
-}
-```
-
-### Lanista (Gladiator Selection)
-
-```typescript
-import { runStructuredAgent, LanistaOutputSchema } from './src/lib/claude/index.js';
-
-const result = await runStructuredAgent(
-  "Create 3 gladiators to solve: 'Build a REST API for a todo app'",
-  LanistaOutputSchema,
-  {
-    allowedTools: ['Read'],
-    model: 'claude-opus-4',
-  }
-);
-
-if (result.success) {
-  result.data.gladiators.forEach(g => {
-    console.log(`${g.name} (${g.model}): ${g.focus}`);
-  });
-}
-```
-
-## Utility Functions
-
-### Cost Formatting
-
-```typescript
-import { formatCost, aggregateCosts } from './src/lib/claude/index.js';
-
-// Format a single cost
-console.log(formatCost(result.cost));
-// Output: $0.0123 (1,234 in 5,678 out 2,000 cached)
-
-// Aggregate multiple costs
-const totalCost = aggregateCosts([result1.cost, result2.cost, result3.cost]);
-console.log(formatCost(totalCost));
-```
-
-### Authentication Helpers
-
-```typescript
-import { isAuthConfigured, getAuthToken } from './src/lib/claude/index.js';
-
-if (!isAuthConfigured()) {
-  console.error('No authentication token found!');
-  process.exit(1);
-}
-
-const token = getAuthToken();
-```
-
-### Predefined Configurations
-
-```typescript
-import { createAgentConfig, MODELS, TOOL_SETS, PERMISSION_MODES } from './src/lib/claude/index.js';
-
-// Create a development agent config
-const devConfig = createAgentConfig('development');
-
-// Create a research agent config with overrides
-const researchConfig = createAgentConfig('research', {
-  model: MODELS.OPUS,
-  maxTurns: 20,
-});
-
-// Use constants for consistency
-const config = {
-  model: MODELS.SONNET,
-  allowedTools: TOOL_SETS.DEVELOPMENT,
-  permissionMode: PERMISSION_MODES.BYPASS,
-};
-```
-
-## Available Tool Sets
-
-```typescript
-TOOL_SETS.READ_ONLY       // ['Read', 'Glob', 'Grep']
-TOOL_SETS.DEVELOPMENT     // ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep']
-TOOL_SETS.CODE_REVIEW     // ['Read', 'Glob', 'Grep']
-TOOL_SETS.RESEARCH        // ['Read', 'Glob', 'Grep', 'WebSearch', 'WebFetch']
-TOOL_SETS.TESTING         // ['Read', 'Bash', 'Glob', 'Grep']
-TOOL_SETS.ALL             // All available tools
-```
-
-## Stream Events
-
-Events emitted during agent execution:
-
-- `init`: Session initialized with configuration
-- `assistant`: Assistant message/response
-- `user`: User message
-- `thinking`: Partial streaming content (when `includePartialMessages: true`)
-- `result`: Final execution result
-- `error`: Error occurred
-
-## Cost Tracking
-
-Every result includes detailed cost information:
-
-```typescript
-interface CostInfo {
-  totalUsd: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheCreationTokens?: number;
-  cacheReadTokens?: number;
-  modelUsage?: Record<string, ModelUsage>;
-}
-```
-
-## Building
+## Development Commands
 
 ```bash
-npm run build
+npm run dev        # Start development server
+npm run build      # Build for production
+npm run start      # Start production server
+npm run lint       # Run Biome linter
+npm run lint:fix   # Fix linting issues
+npm run format     # Format code with Biome
+npm run check      # Lint and format in one command
+
+# Database commands
+npm run db:generate  # Generate migrations
+npm run db:migrate   # Run migrations
+npm run db:push      # Push schema changes
+npm run db:studio    # Open Drizzle Studio
 ```
 
-Outputs compiled JavaScript and type declarations to `dist/`.
+## Architecture Overview
 
-## Development
+Thunderdome is built with:
 
-```bash
-npm run dev  # Watch mode with auto-rebuild
+- **Next.js 16** - React framework with App Router
+- **NextAuth.js** - GitHub OAuth authentication
+- **Drizzle ORM** - Type-safe database layer (SQLite)
+- **Claude Agent SDK** - AI agent orchestration
+- **Docker** - Sandboxed gladiator execution
+- **Tailwind CSS** - Styling
+- **Biome** - Fast linting and formatting
+
+### Project Structure
+
+```
+thunderdome/
+├── src/
+│   ├── app/                    # Next.js app router
+│   │   ├── api/                # API routes
+│   │   │   ├── auth/           # NextAuth endpoints
+│   │   │   ├── github/         # GitHub integration
+│   │   │   ├── repos/          # Repository analysis
+│   │   │   └── trials/         # Trial orchestration
+│   │   ├── trials/             # Trial pages
+│   │   └── settings/           # User settings
+│   ├── components/             # React components
+│   │   ├── auth/               # Authentication
+│   │   ├── setup/              # Setup discovery
+│   │   └── trials/             # Trial UI
+│   ├── db/                     # Database schema & config
+│   ├── lib/                    # Core logic
+│   │   ├── claude/             # Claude SDK wrapper
+│   │   ├── docker/             # Docker container management
+│   │   ├── github/             # GitHub API
+│   │   └── trial/              # Trial orchestration
+│   │       ├── arbiter/        # Judge selection
+│   │       ├── code-battle/    # Code battle mode
+│   │       ├── consul/         # Post-battle dialogue
+│   │       ├── gladiator/      # Gladiator execution
+│   │       └── lanista/        # Gladiator design
+│   └── types/                  # TypeScript types
+└── drizzle/                    # Database migrations
 ```
 
-## License
+## The Battle Flow
 
-See LICENSE file in repository root.
+### 1. Trial Creation
 
-## Next Steps
+Users create a "trial" by:
+- Providing a challenge/question
+- Optionally linking a GitHub repository for context
+- Selecting battle mode (Code Battle vs Classic)
 
-This SDK integration layer provides the foundation for:
-1. **Lanista**: Gladiator selection and configuration
-2. **Arbiter**: Judge selection and configuration
-3. **Arena**: Coordinating gladiator execution
-4. **Judges**: Evaluating gladiator outputs
-5. **Orchestrator**: Managing the complete Thunderdome workflow
+### 2. Lanista (Gladiator Design)
+
+The Lanista analyzes the challenge and:
+- Designs 3 gladiators with different perspectives
+- Assigns each a unique focus (e.g., security, performance, simplicity)
+- Configures tools and parameters per gladiator
+
+**Gladiator Archetypes:**
+- **The Pragmatist** - Fast, practical solutions
+- **The Paranoid** - Security-first approach
+- **The Minimalist** - Simplest possible solution
+- **The Academic** - Research-backed answers
+- **The Contrarian** - Challenges conventional wisdom
+
+### 3. Battle Execution
+
+Gladiators run in parallel:
+- **Classic Mode:** Direct challenge response
+- **Code Battle Mode:** Containerized execution with repo access
+  - Each gladiator gets a Docker container
+  - Full repo clone and Claude Agent SDK access
+  - Produces code changes and analysis
+
+### 4. Arbiter (Judge Selection)
+
+The Arbiter sees all gladiator outputs and:
+- Designs judges appropriate for what was produced
+- Spawns judge instances to evaluate from different angles
+- Collects evaluations with scores and rankings
+
+### 5. Verdict Synthesis
+
+Judges' evaluations are aggregated into a final verdict:
+- Overall winner
+- Scores per gladiator
+- Strengths and weaknesses
+- Recommendations
+
+### 6. Consul (Interactive Dialogue)
+
+After battle, the Consul enables:
+- Discussing results with an AI guide
+- Asking clarifying questions
+- Requesting synthesis or combinations
+- Planning next steps
+
+### 7. Editor Decree
+
+You make the final call:
+- Export results as markdown
+- Create a new trial with refined challenge
+- Review individual gladiator outputs
+
+## Code Battle Mode
+
+Code Battle is Thunderdome's signature feature for development challenges.
+
+**How it works:**
+
+1. User provides a GitHub repository and task
+2. Lanista designs gladiators specialized for the codebase
+3. Each gladiator gets:
+   - Isolated Docker container
+   - Full repo clone
+   - Claude Agent SDK with filesystem access
+   - Ability to read, analyze, and propose changes
+4. Gladiators analyze the repo and produce solutions
+5. Judges evaluate code quality, approach, and correctness
+
+**Use cases:**
+
+- "Add authentication to this API"
+- "Refactor this module for better testability"
+- "Find and fix security vulnerabilities"
+- "Optimize this database query"
 
 ## API Reference
 
-See the TypeScript type definitions in `src/lib/claude/types.ts` and inline documentation for detailed API information.
+### Trial API
+
+```typescript
+// Start a trial
+POST /api/trials/:id/start
+{
+  mode: 'classic' | 'code'
+}
+
+// Stream trial updates
+GET /api/trials/:id/stream
+
+// Query Consul
+POST /api/trials/:id/consul
+{
+  message: string,
+  history: Message[]
+}
+
+// Export results
+GET /api/trials/:id/export
+```
+
+### GitHub API
+
+```typescript
+// List user repositories
+GET /api/github/repos
+
+// Analyze repository setup
+GET /api/repos/:owner/:repo/setup
+```
+
+## Security
+
+- User Claude API tokens encrypted at rest using `ENCRYPTION_KEY`
+- GitHub OAuth with restricted scopes
+- Docker containers isolated per gladiator
+- No shared state between battles
+- Rate limiting on API endpoints
+
+## Performance
+
+- Parallel gladiator execution
+- Streaming results via Server-Sent Events
+- Database connection pooling
+- Docker container lifecycle management
+- Efficient token usage tracking
+
+## Troubleshooting
+
+### "No Claude API token configured"
+
+Each user must provide their own Claude API token:
+1. Go to Settings in the app
+2. Enter your Anthropic API key
+3. Token is encrypted and stored per-user
+
+### "Docker connection failed"
+
+Ensure Docker is running:
+```bash
+docker ps  # Should list running containers
+```
+
+### Database issues
+
+Reset the database:
+```bash
+rm thunderdome.db
+npm run db:push
+```
+
+### Build errors
+
+Clear Next.js cache:
+```bash
+rm -rf .next
+npm run build
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run `npm run check` to lint and format
+5. Run `npm run build` to verify
+6. Submit a pull request
+
+## License
+
+MIT - See LICENSE file for details.
+
+## Credits
+
+Built with the [Claude Agent SDK](https://github.com/anthropics/anthropic-sdk-typescript) and inspired by the ancient Roman gladiatorial tradition. May the best answer win.

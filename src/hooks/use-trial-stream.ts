@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type TrialEvent = {
   type: string;
@@ -36,10 +36,7 @@ export type UseTrialStreamOptions = {
 /**
  * Hook to stream trial updates via SSE
  */
-export function useTrialStream(
-  trialId: string | null,
-  options: UseTrialStreamOptions = {}
-) {
+export function useTrialStream(trialId: string | null, options: UseTrialStreamOptions = {}) {
   const {
     enabled = true,
     reconnectDelay = 2000,
@@ -93,13 +90,10 @@ export function useTrialStream(
           }));
 
           onEvent?.(data);
-        } catch (error) {
-          console.error("Failed to parse SSE event:", error);
-        }
+        } catch (_error) {}
       };
 
-      eventSource.onerror = (error) => {
-        console.error("SSE connection error:", error);
+      eventSource.onerror = (_error) => {
         eventSource.close();
 
         setState((prev) => ({
@@ -115,15 +109,10 @@ export function useTrialStream(
           reconnectAttemptsRef.current++;
 
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log(
-              `Reconnecting... (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`
-            );
             connect();
           }, reconnectDelay);
         } else {
-          const maxRetriesError = new Error(
-            "Max reconnection attempts reached"
-          );
+          const maxRetriesError = new Error("Max reconnection attempts reached");
           setState((prev) => ({
             ...prev,
             error: maxRetriesError.message,
@@ -132,8 +121,7 @@ export function useTrialStream(
         }
       };
     } catch (error) {
-      const connectionError =
-        error instanceof Error ? error : new Error("Failed to connect");
+      const connectionError = error instanceof Error ? error : new Error("Failed to connect");
       setState((prev) => ({
         ...prev,
         connected: false,

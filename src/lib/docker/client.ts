@@ -1,4 +1,4 @@
-import Docker from 'dockerode';
+import Docker from "dockerode";
 
 let dockerClient: Docker | null = null;
 
@@ -20,8 +20,7 @@ export async function isDockerAvailable(): Promise<boolean> {
     const docker = getDockerClient();
     await docker.ping();
     return true;
-  } catch (error) {
-    console.error('Docker is not available:', error);
+  } catch (_error) {
     return false;
   }
 }

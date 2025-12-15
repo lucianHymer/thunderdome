@@ -4,8 +4,8 @@
  * Utilities for accessing and requiring authentication in server components and actions.
  */
 
-import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 
 /**
  * Get the current authenticated user

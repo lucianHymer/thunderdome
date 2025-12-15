@@ -12,51 +12,51 @@ interface StatusBannerProps {
 
 const statusConfig = {
   PENDING: {
-    emoji: '⏳',
-    label: 'Pending',
-    color: 'text-gray-400',
-    bgColor: 'bg-gray-900',
-    borderColor: 'border-gray-700',
+    emoji: "⏳",
+    label: "Pending",
+    color: "text-gray-400",
+    bgColor: "bg-gray-900",
+    borderColor: "border-gray-700",
     animate: false,
   },
   PLANNING: {
-    emoji: '🧠',
-    label: 'Lanista Designing',
-    color: 'text-yellow-400',
-    bgColor: 'bg-yellow-950/30',
-    borderColor: 'border-yellow-700/50',
+    emoji: "🧠",
+    label: "Lanista Designing",
+    color: "text-yellow-400",
+    bgColor: "bg-yellow-950/30",
+    borderColor: "border-yellow-700/50",
     animate: true,
   },
   RUNNING: {
-    emoji: '⚔️',
-    label: 'Battle in Progress',
-    color: 'text-orange-400',
-    bgColor: 'bg-orange-950/30',
-    borderColor: 'border-orange-700/50',
+    emoji: "⚔️",
+    label: "Battle in Progress",
+    color: "text-orange-400",
+    bgColor: "bg-orange-950/30",
+    borderColor: "border-orange-700/50",
     animate: true,
   },
   JUDGING: {
-    emoji: '⚖️',
-    label: 'Arbiter Judging',
-    color: 'text-purple-400',
-    bgColor: 'bg-purple-950/30',
-    borderColor: 'border-purple-700/50',
+    emoji: "⚖️",
+    label: "Arbiter Judging",
+    color: "text-purple-400",
+    bgColor: "bg-purple-950/30",
+    borderColor: "border-purple-700/50",
     animate: true,
   },
   COMPLETED: {
-    emoji: '✅',
-    label: 'Complete',
-    color: 'text-green-400',
-    bgColor: 'bg-green-950/30',
-    borderColor: 'border-green-700/50',
+    emoji: "✅",
+    label: "Complete",
+    color: "text-green-400",
+    bgColor: "bg-green-950/30",
+    borderColor: "border-green-700/50",
     animate: false,
   },
   FAILED: {
-    emoji: '❌',
-    label: 'Failed',
-    color: 'text-red-400',
-    bgColor: 'bg-red-950/30',
-    borderColor: 'border-red-700/50',
+    emoji: "❌",
+    label: "Failed",
+    color: "text-red-400",
+    bgColor: "bg-red-950/30",
+    borderColor: "border-red-700/50",
     animate: false,
   },
 };
@@ -67,7 +67,7 @@ export function StatusBanner({ status, message }: StatusBannerProps) {
   return (
     <div
       className={`border ${config.borderColor} ${config.bgColor} rounded-lg p-4 mb-6 ${
-        config.animate ? 'animate-pulse' : ''
+        config.animate ? "animate-pulse" : ""
       }`}
     >
       <div className="flex items-center gap-3">

@@ -2,28 +2,28 @@
  * Lanista runner - designs gladiators for a trial
  */
 
-import { eq } from 'drizzle-orm';
-import { db } from '../../../db/index.js';
-import { trials, gladiators } from '../../../db/schema.js';
+import { eq } from "drizzle-orm";
+import { db } from "../../../db/index";
+import { gladiators, trials } from "../../../db/schema";
 import {
-  runStructuredAgentWithRetry,
-  LanistaOutput,
+  type LanistaOutput,
   LanistaOutputSchema,
   MODELS,
-} from '../../claude/index.js';
-import { LANISTA_SYSTEM_PROMPT, LANISTA_USER_PROMPT } from './prompts.js';
-import { StatusCallback } from '../types.js';
+  runStructuredAgentWithRetry,
+} from "../../claude/index";
+import type { StatusCallback } from "../types";
+import { LANISTA_SYSTEM_PROMPT, LANISTA_USER_PROMPT } from "./prompts";
 
 /**
  * Maps gladiator model names to actual Claude model IDs
  */
-function mapGladiatorModel(model: 'opus' | 'sonnet' | 'haiku'): string {
+function mapGladiatorModel(model: "opus" | "sonnet" | "haiku"): string {
   switch (model) {
-    case 'opus':
+    case "opus":
       return MODELS.OPUS;
-    case 'sonnet':
+    case "sonnet":
       return MODELS.SONNET;
-    case 'haiku':
+    case "haiku":
       return MODELS.HAIKU;
     default:
       return MODELS.SONNET;
@@ -36,8 +36,8 @@ function mapGladiatorModel(model: 'opus' | 'sonnet' | 'haiku'): string {
 function createBranchName(trialId: string, gladiatorName: string): string {
   const sanitized = gladiatorName
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
   return `trial-${trialId.slice(0, 8)}-${sanitized}`;
 }
 
@@ -52,7 +52,7 @@ function createBranchName(trialId: string, gladiatorName: string): string {
 export async function runLanista(
   trialId: string,
   oauthToken: string,
-  onStatus?: StatusCallback
+  onStatus?: StatusCallback,
 ): Promise<LanistaOutput> {
   try {
     // Fetch the trial
@@ -65,15 +65,12 @@ export async function runLanista(
     }
 
     // Update trial status to PLANNING
-    await db
-      .update(trials)
-      .set({ status: 'PLANNING' })
-      .where(eq(trials.id, trialId));
+    await db.update(trials).set({ status: "PLANNING" }).where(eq(trials.id, trialId));
 
     // Notify that Lanista is thinking
     onStatus?.({
-      type: 'lanista_thinking',
-      data: { trialId, status: 'Lanista is designing gladiators...' },
+      type: "lanista_thinking",
+      data: { trialId, status: "Lanista is designing gladiators..." },
     });
 
     // Generate the prompt
@@ -81,7 +78,7 @@ export async function runLanista(
       trial.challengePrompt,
       trial.trialType,
       // TODO: Add repo context from repoSetups table if needed
-      undefined
+      undefined,
     );
 
     // Run the Lanista with structured output
@@ -93,14 +90,14 @@ export async function runLanista(
         allowedTools: [], // Lanista doesn't need tools, just reasoning
         maxTurns: 1, // Single-turn structured output
         systemPrompt: LANISTA_SYSTEM_PROMPT,
-        permissionMode: 'bypassPermissions',
+        permissionMode: "bypassPermissions",
       },
       2, // Max 2 retries for validation failures
-      oauthToken
+      oauthToken,
     );
 
     if (!result.success || !result.data) {
-      throw new Error(`Lanista failed: ${result.error || 'No data returned'}`);
+      throw new Error(`Lanista failed: ${result.error || "No data returned"}`);
     }
 
     const lanistaOutput = result.data;
@@ -119,7 +116,7 @@ export async function runLanista(
 
     // Notify that Lanista is complete
     onStatus?.({
-      type: 'lanista_complete',
+      type: "lanista_complete",
       data: {
         trialId,
         reasoning: lanistaOutput.reasoning,
@@ -129,7 +126,7 @@ export async function runLanista(
     });
 
     // Create gladiator records in the database
-    const gladiatorRecords = lanistaOutput.gladiators.map((g, index) => ({
+    const gladiatorRecords = lanistaOutput.gladiators.map((g, _index) => ({
       trialId,
       name: g.name,
       persona: g.persona,
@@ -137,18 +134,15 @@ export async function runLanista(
       temperature: Math.round(g.temperature * 100), // Store as integer 0-100
       tools: JSON.stringify(g.tools),
       branchName: createBranchName(trialId, g.name),
-      status: 'PENDING' as const,
+      status: "PENDING" as const,
     }));
 
     // Insert all gladiators
-    const insertedGladiators = await db
-      .insert(gladiators)
-      .values(gladiatorRecords)
-      .returning();
+    const insertedGladiators = await db.insert(gladiators).values(gladiatorRecords).returning();
 
     // Notify that gladiators have been created
     onStatus?.({
-      type: 'gladiators_created',
+      type: "gladiators_created",
       data: {
         trialId,
         gladiators: insertedGladiators.map((g) => ({
@@ -161,10 +155,7 @@ export async function runLanista(
     });
 
     // Transition trial to RUNNING state (ready for battling)
-    await db
-      .update(trials)
-      .set({ status: 'RUNNING' })
-      .where(eq(trials.id, trialId));
+    await db.update(trials).set({ status: "RUNNING" }).where(eq(trials.id, trialId));
 
     // TODO: Kick off gladiators (will be implemented in Issue 6)
     // For now, this is just a stub
@@ -174,18 +165,15 @@ export async function runLanista(
   } catch (error) {
     // Notify of error
     onStatus?.({
-      type: 'lanista_error',
+      type: "lanista_error",
       data: {
         trialId,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       },
     });
 
     // Update trial status to FAILED
-    await db
-      .update(trials)
-      .set({ status: 'FAILED' })
-      .where(eq(trials.id, trialId));
+    await db.update(trials).set({ status: "FAILED" }).where(eq(trials.id, trialId));
 
     throw error;
   }
@@ -195,12 +183,9 @@ export async function runLanista(
  * Stub function for kicking off gladiators
  * Will be implemented in Issue 6
  */
-async function kickOffGladiators(
-  trialId: string,
-  gladiatorRecords: any[],
-  oauthToken: string,
-  onStatus?: StatusCallback
-): Promise<void> {
-  // TODO: Implement in Issue 6
-  console.log(`Would kick off ${gladiatorRecords.length} gladiators for trial ${trialId}`);
-}
+async function _kickOffGladiators(
+  _trialId: string,
+  _gladiatorRecords: any[],
+  _oauthToken: string,
+  _onStatus?: StatusCallback,
+): Promise<void> {}

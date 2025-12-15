@@ -5,25 +5,21 @@
  * Redirects if not logged in or no Claude token.
  */
 
-import { requireUser } from '@/lib/session';
-import { redirect } from 'next/navigation';
-import { db } from '@/db';
-import { users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import { NewTrialForm } from '@/components/trials/new-trial-form';
+import { eq } from "drizzle-orm";
+import { redirect } from "next/navigation";
+import { NewTrialForm } from "@/components/trials/new-trial-form";
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import { requireUser } from "@/lib/session";
 
 export default async function NewTrialPage() {
   const user = await requireUser();
 
   // Check if user has Claude token
-  const [userData] = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, user.id!))
-    .limit(1);
+  const [userData] = await db.select().from(users).where(eq(users.id, user.id!)).limit(1);
 
   if (!userData?.claudeToken) {
-    redirect('/settings');
+    redirect("/settings");
   }
 
   return (

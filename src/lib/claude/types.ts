@@ -3,37 +3,27 @@
  */
 
 import type {
-  SDKMessage as SDKMessageOriginal,
-  SDKAssistantMessage,
-  SDKUserMessage,
-  SDKResultMessage,
-  SDKSystemMessage,
-  SDKPartialAssistantMessage,
-  Options,
   ModelUsage,
-} from '@anthropic-ai/claude-agent-sdk';
+  Options,
+  SDKMessage as SDKMessageOriginal,
+} from "@anthropic-ai/claude-agent-sdk";
 
 // Re-export SDK message types for convenience
 export type {
-  SDKMessage as SDKMessageOriginal,
+  ModelUsage,
+  Options,
   SDKAssistantMessage,
-  SDKUserMessage,
+  SDKMessage as SDKMessageOriginal,
+  SDKPartialAssistantMessage,
   SDKResultMessage,
   SDKSystemMessage,
-  SDKPartialAssistantMessage,
-  Options,
-  ModelUsage,
-} from '@anthropic-ai/claude-agent-sdk';
+  SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 
 /**
  * SDK message types for easier categorization
  */
-export type SDKMessageType =
-  | 'assistant'
-  | 'user'
-  | 'result'
-  | 'system'
-  | 'stream_event';
+export type SDKMessageType = "assistant" | "user" | "result" | "system" | "stream_event";
 
 /**
  * Generic SDK message interface
@@ -45,7 +35,7 @@ export type SDKMessage = SDKMessageOriginal;
  */
 export interface AgentConfig {
   /** System prompt for the agent */
-  systemPrompt?: string | { type: 'preset'; preset: 'claude_code'; append?: string };
+  systemPrompt?: string | { type: "preset"; preset: "claude_code"; append?: string };
 
   /** Claude model to use (e.g., 'claude-opus-4', 'claude-sonnet-4') */
   model?: string;
@@ -66,7 +56,7 @@ export interface AgentConfig {
   cwd?: string;
 
   /** Permission mode */
-  permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+  permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan";
 
   /** Whether to include partial messages in stream */
   includePartialMessages?: boolean;
@@ -82,14 +72,14 @@ export interface AgentConfig {
  * Types of events that can be emitted during agent execution
  */
 export type StreamEventType =
-  | 'init'           // Session initialized
-  | 'assistant'      // Assistant message
-  | 'user'           // User message
-  | 'tool_use'       // Tool being used
-  | 'tool_result'    // Tool result
-  | 'thinking'       // Assistant thinking (partial)
-  | 'result'         // Final result
-  | 'error';         // Error occurred
+  | "init" // Session initialized
+  | "assistant" // Assistant message
+  | "user" // User message
+  | "tool_use" // Tool being used
+  | "tool_result" // Tool result
+  | "thinking" // Assistant thinking (partial)
+  | "result" // Final result
+  | "error"; // Error occurred
 
 /**
  * Event emitted during agent stream execution

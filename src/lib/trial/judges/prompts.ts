@@ -8,11 +8,11 @@
 export function buildJudgeSystemPrompt(
   judgeName: string,
   judgeFocus: string,
-  evaluationCriteria: string[]
+  evaluationCriteria: string[],
 ): string {
   const criteriaList = evaluationCriteria
     .map((criterion, idx) => `${idx + 1}. ${criterion}`)
-    .join('\n');
+    .join("\n");
 
   return `You are ${judgeName} - a specialized judge in the Thunderdome arena.
 
@@ -83,7 +83,7 @@ export function buildJudgeUserPrompt(
     id: string;
     name: string;
     responseContent: string;
-  }>
+  }>,
 ): string {
   const outputsSection = gladiatorOutputs
     .map(
@@ -94,9 +94,9 @@ export function buildJudgeUserPrompt(
 **Output**:
 ${g.responseContent}
 
----`
+---`,
     )
-    .join('\n\n');
+    .join("\n\n");
 
   return `# THE CHALLENGE
 

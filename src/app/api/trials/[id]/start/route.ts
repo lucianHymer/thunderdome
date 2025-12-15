@@ -4,33 +4,26 @@
  * POST /api/trials/:id/start - Start the trial and kick off Lanista or Code Battle
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/session";
+import { and, eq } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { trials, repoSetups, users } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
-import { transitionTrialState } from "@/lib/trial/state";
-import { runCodeBattle } from "@/lib/trial/code-battle/orchestrator";
+import { repoSetups, trials, users } from "@/db/schema";
 import { decrypt } from "@/lib/encryption";
+import { requireUser } from "@/lib/session";
+import { runCodeBattle } from "@/lib/trial/code-battle/orchestrator";
+import { transitionTrialState } from "@/lib/trial/state";
 
 /**
  * POST - Start a trial
  * Transitions from PENDING to lanista_designing (PLANNING) or starts code battle
  */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireUser();
     const { id: trialId } = await params;
 
     // Get the trial
-    const [trial] = await db
-      .select()
-      .from(trials)
-      .where(eq(trials.id, trialId))
-      .limit(1);
+    const [trial] = await db.select().from(trials).where(eq(trials.id, trialId)).limit(1);
 
     if (!trial) {
       return NextResponse.json({ error: "Trial not found" }, { status: 404 });
@@ -45,7 +38,7 @@ export async function POST(
     if (trial.status !== "PENDING") {
       return NextResponse.json(
         { error: `Trial is not pending (current status: ${trial.status})` },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -53,16 +46,13 @@ export async function POST(
     if (trial.repoUrl) {
       // Check setup exists
       const setup = await db.query.repoSetups.findFirst({
-        where: and(
-          eq(repoSetups.userId, user.id),
-          eq(repoSetups.repoUrl, trial.repoUrl)
-        ),
+        where: and(eq(repoSetups.userId, user.id), eq(repoSetups.repoUrl, trial.repoUrl)),
       });
 
       if (!setup) {
         return NextResponse.json(
           { error: "Repo setup required. Run Setup Discovery first." },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -75,7 +65,7 @@ export async function POST(
       if (!dbUser?.claudeToken) {
         return NextResponse.json(
           { error: "Claude token required. Configure in settings." },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -107,19 +97,11 @@ export async function POST(
       status: "PLANNING",
     });
   } catch (error: any) {
-    console.error("Error starting trial:", error);
-
     // Handle state transition errors specially
     if (error.message?.includes("Invalid state transition")) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json(
-      { error: "Failed to start trial" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to start trial" }, { status: 500 });
   }
 }

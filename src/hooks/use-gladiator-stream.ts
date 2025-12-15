@@ -4,10 +4,10 @@
  * Manages SSE connection for individual gladiator's streaming output.
  */
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from "react";
 
 export interface GladiatorStreamEvent {
-  type: 'text' | 'tool_use' | 'status' | 'complete' | 'error';
+  type: "text" | "tool_use" | "status" | "complete" | "error";
   content: string;
   timestamp: number;
   data?: any;
@@ -23,7 +23,7 @@ export interface GladiatorStreamState {
 
 export function useGladiatorStream(gladiatorId: string) {
   const [state, setState] = useState<GladiatorStreamState>({
-    output: '',
+    output: "",
     events: [],
     isStreaming: false,
     isComplete: false,
@@ -37,37 +37,37 @@ export function useGladiatorStream(gladiatorId: string) {
     eventSourceRef.current = eventSource;
 
     eventSource.onopen = () => {
-      setState(prev => ({ ...prev, isStreaming: true, error: null }));
+      setState((prev) => ({ ...prev, isStreaming: true, error: null }));
     };
 
-    eventSource.addEventListener('text', (e: MessageEvent) => {
+    eventSource.addEventListener("text", (e: MessageEvent) => {
       const event: GladiatorStreamEvent = JSON.parse(e.data);
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         output: prev.output + event.content,
         events: [...prev.events, event],
       }));
     });
 
-    eventSource.addEventListener('tool_use', (e: MessageEvent) => {
+    eventSource.addEventListener("tool_use", (e: MessageEvent) => {
       const event: GladiatorStreamEvent = JSON.parse(e.data);
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         events: [...prev.events, event],
       }));
     });
 
-    eventSource.addEventListener('status', (e: MessageEvent) => {
+    eventSource.addEventListener("status", (e: MessageEvent) => {
       const event: GladiatorStreamEvent = JSON.parse(e.data);
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         events: [...prev.events, event],
       }));
     });
 
-    eventSource.addEventListener('complete', (e: MessageEvent) => {
+    eventSource.addEventListener("complete", (e: MessageEvent) => {
       const event: GladiatorStreamEvent = JSON.parse(e.data);
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         isStreaming: false,
         isComplete: true,
@@ -76,9 +76,9 @@ export function useGladiatorStream(gladiatorId: string) {
       eventSource.close();
     });
 
-    eventSource.addEventListener('error_event', (e: MessageEvent) => {
+    eventSource.addEventListener("error_event", (e: MessageEvent) => {
       const event: GladiatorStreamEvent = JSON.parse(e.data);
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         error: event.content,
         isStreaming: false,
@@ -87,10 +87,10 @@ export function useGladiatorStream(gladiatorId: string) {
     });
 
     eventSource.onerror = () => {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         isStreaming: false,
-        error: prev.error || 'Connection lost',
+        error: prev.error || "Connection lost",
       }));
       eventSource.close();
     };
