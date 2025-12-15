@@ -326,9 +326,9 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3">
-            <Button onClick={() => setConsulOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+            <Button onClick={() => setConsulOpen(true)} className="bg-purple-600 hover:bg-purple-700">
               <MessageSquare className="h-4 w-4 mr-2" />
-              Consult the Consul
+              Summon the Consul
             </Button>
             <Button onClick={handleExport} variant="outline">
               <Download className="h-4 w-4 mr-2" />
