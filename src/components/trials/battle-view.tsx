@@ -270,7 +270,7 @@ export function BattleView({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <pre className="text-xs font-mono overflow-x-auto bg-black/50 p-3 rounded">
+                <pre className="text-xs font-mono overflow-x-auto bg-black/50 text-gray-200 p-3 rounded">
                   {JSON.stringify(
                     {
                       id: trial.id,
@@ -297,7 +297,7 @@ export function BattleView({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <pre className="text-xs font-mono overflow-x-auto bg-black/50 p-3 rounded max-h-48 overflow-y-auto">
+                <pre className="text-xs font-mono overflow-x-auto bg-black/50 text-gray-200 p-3 rounded max-h-48 overflow-y-auto">
                   {JSON.stringify(
                     {
                       currentPhase,
@@ -322,7 +322,7 @@ export function BattleView({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <pre className="text-xs font-mono overflow-x-auto bg-black/50 p-3 rounded">
+                <pre className="text-xs font-mono overflow-x-auto bg-black/50 text-gray-200 p-3 rounded">
                   {JSON.stringify(
                     {
                       connected: stream.connected,
@@ -346,7 +346,7 @@ export function BattleView({
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <pre className="text-xs font-mono overflow-x-auto bg-black/50 p-3 rounded max-h-64 overflow-y-auto">
+                  <pre className="text-xs font-mono overflow-x-auto bg-black/50 text-gray-200 p-3 rounded max-h-64 overflow-y-auto">
                     {JSON.stringify(stream.events, null, 2)}
                   </pre>
                 </CardContent>

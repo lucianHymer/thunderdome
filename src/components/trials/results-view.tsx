@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Markdown } from "@/components/ui/markdown";
 import { ConsulDialog } from "./consul-dialog";
 
 interface Gladiator {
@@ -67,6 +68,14 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
 
     try {
       const parsed = JSON.parse(evaluation);
+      // Handle the stored structure which has evaluations under 'output'
+      if (parsed.output) {
+        return {
+          summary: parsed.output.summary,
+          evaluations: parsed.output.evaluations || [],
+        };
+      }
+      // Fallback for direct structure
       return parsed;
     } catch {
       // If not JSON, return null and just show raw text
@@ -136,8 +145,12 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-lg font-semibold">{verdict.summary}</p>
-          <div className="text-muted-foreground whitespace-pre-wrap">{verdict.reasoning}</div>
+          <div className="text-lg font-semibold">
+            <Markdown>{verdict.summary}</Markdown>
+          </div>
+          <div className="text-muted-foreground">
+            <Markdown>{verdict.reasoning}</Markdown>
+          </div>
           {verdict.winnerGladiatorId && (
             <div className="flex items-center gap-2 pt-2">
               <Badge className="bg-yellow-500 text-black font-semibold">👑 Winner</Badge>
@@ -192,8 +205,12 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
                       <div className="text-sm text-muted-foreground mb-3">
                         <strong>Persona:</strong> {gladiator.persona}
                       </div>
-                      <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap">
-                        {gladiator.responseContent || "No response available"}
+                      <div className="bg-muted/50 rounded-lg p-4 text-sm">
+                        {gladiator.responseContent ? (
+                          <Markdown>{gladiator.responseContent}</Markdown>
+                        ) : (
+                          <span className="text-muted-foreground">No response available</span>
+                        )}
                       </div>
                     </CardContent>
                   </CollapsibleContent>

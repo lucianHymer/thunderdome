@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useGladiatorStream, type GladiatorStreamEvent } from "@/hooks/use-gladiator-stream";
 import { ToolUseCard } from "./cards/tool-use-card";
+import { Markdown } from "@/components/ui/markdown";
 import { cn } from "@/lib/utils";
 
 interface GladiatorPanelProps {
@@ -175,11 +176,8 @@ export function GladiatorPanel({ gladiator, isWinner }: GladiatorPanelProps) {
                 segments.map((segment, index) => {
                   if (segment.type === "text") {
                     return (
-                      <div
-                        key={`text-${index}`}
-                        className="text-sm font-mono whitespace-pre-wrap text-foreground/90"
-                      >
-                        {segment.content}
+                      <div key={`text-${index}`} className="text-sm">
+                        <Markdown>{segment.content}</Markdown>
                       </div>
                     );
                   }

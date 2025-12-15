@@ -126,7 +126,7 @@ export function ToolUseCard({
             {formattedInput && (
               <div className="space-y-1">
                 <span className="text-xs text-muted-foreground">Input</span>
-                <pre className="text-xs font-mono bg-black/30 rounded p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all">
+                <pre className="text-xs font-mono bg-black/50 text-gray-200 rounded p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all">
                   {formattedInput}
                 </pre>
               </div>
@@ -136,7 +136,7 @@ export function ToolUseCard({
             {output && (
               <div className="space-y-1">
                 <span className="text-xs text-muted-foreground">Output</span>
-                <pre className="text-xs font-mono bg-black/30 rounded p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all">
+                <pre className="text-xs font-mono bg-black/50 text-gray-200 rounded p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all">
                   {output}
                 </pre>
               </div>
