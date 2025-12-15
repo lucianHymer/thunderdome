@@ -164,10 +164,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           // Send completion signal
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
-        } catch (_error) {
+        } catch (error) {
+          console.error("[Consul API] Stream error:", error);
           const errorData = JSON.stringify({
             type: "error",
-            message: "Failed to get response from Consul",
+            message: error instanceof Error ? error.message : "Failed to get response from Consul",
           });
           controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
           controller.close();
@@ -189,8 +190,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         Connection: "keep-alive",
       },
     });
-  } catch (_error) {
-    return NextResponse.json({ error: "Failed to process request" }, { status: 500 });
+  } catch (error) {
+    console.error("[Consul API] Request error:", error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to process request" }, { status: 500 });
   }
 }
 

@@ -126,9 +126,22 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
                   };
                   return newMessages;
                 });
+              } else if (parsed.type === "error") {
+                // Handle error response from server
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  const idx = placeholderIndex >= 0 && placeholderIndex < prev.length
+                    ? placeholderIndex
+                    : prev.length - 1;
+                  newMessages[idx] = {
+                    role: "consul",
+                    content: `Error: ${parsed.message || "Unknown error occurred"}`,
+                  };
+                  return newMessages;
+                });
               }
-            } catch (_e) {
-              // Ignore parse errors
+            } catch (e) {
+              console.error("[Consul] Failed to parse stream data:", e, data);
             }
           }
         }
@@ -270,6 +283,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
             <Button
               size="sm"
               variant="outline"
+              className="border-purple-500/50 hover:bg-purple-500/20"
               onClick={() => handleQuickAction("Merge the winner's changes")}
             >
               <GitMerge className="h-3 w-3 mr-1" />
@@ -278,6 +292,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
             <Button
               size="sm"
               variant="outline"
+              className="border-purple-500/50 hover:bg-purple-500/20"
               onClick={() => handleQuickAction("Create a PR with the winner's changes")}
             >
               <GitPullRequest className="h-3 w-3 mr-1" />
@@ -286,6 +301,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
             <Button
               size="sm"
               variant="outline"
+              className="border-purple-500/50 hover:bg-purple-500/20"
               onClick={() => handleQuickAction("Synthesize the best elements from both gladiators")}
             >
               <Sparkles className="h-3 w-3 mr-1" />
@@ -295,7 +311,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
         )}
 
         {/* Input */}
-        <div className="flex gap-2 pt-2 border-t border-border items-end">
+        <div className="flex gap-2 pt-2 border-t border-purple-500/30 items-end">
           <Textarea
             ref={textareaRef}
             value={input}
@@ -303,10 +319,10 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
             onKeyDown={handleKeyDown}
             placeholder="Ask the Consul for guidance..."
             disabled={isStreaming}
-            className="flex-1 min-h-[40px] max-h-[150px] resize-none"
+            className="flex-1 min-h-[40px] max-h-[150px] resize-none bg-black/30 border-purple-500/50 text-foreground placeholder:text-muted-foreground focus:border-purple-400"
             rows={1}
           />
-          <Button onClick={sendMessage} disabled={!input.trim() || isStreaming} size="icon" className="shrink-0">
+          <Button onClick={sendMessage} disabled={!input.trim() || isStreaming} size="icon" className="shrink-0 bg-purple-600 hover:bg-purple-700 text-white">
             {isStreaming ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
