@@ -13,20 +13,8 @@ npm run build
 cp -r .next/static .next/standalone/.next/
 [ -d public ] && cp -r public .next/standalone/
 
-echo "📦 Packaging..."
-# Use gtar if available (homebrew gnu-tar), otherwise tar
-TAR_CMD=$(command -v gtar || echo "tar")
-$TAR_CMD -czf /tmp/thunderdome.tar.gz --directory=.next/standalone .
-
-# Verify
-echo "🔍 Checking package..."
-$TAR_CMD -tzf /tmp/thunderdome.tar.gz | grep -E "^\./server\.js$" || { echo "ERROR: server.js not at root!"; $TAR_CMD -tzf /tmp/thunderdome.tar.gz | head -20; exit 1; }
-
 echo "📤 Uploading..."
-scp /tmp/thunderdome.tar.gz $SERVER:/tmp/
-
-echo "📂 Deploying..."
-ssh $SERVER "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR && cd $REMOTE_DIR && tar xzf /tmp/thunderdome.tar.gz && rm /tmp/thunderdome.tar.gz"
+rsync -avz --delete .next/standalone/ $SERVER:$REMOTE_DIR/
 
 # Env
 scp .env.production $SERVER:$REMOTE_DIR/.env 2>/dev/null || echo "No .env.production"
@@ -34,5 +22,4 @@ scp .env.production $SERVER:$REMOTE_DIR/.env 2>/dev/null || echo "No .env.produc
 echo "🔄 Starting..."
 ssh $SERVER "cd $REMOTE_DIR && pm2 delete thunderdome 2>/dev/null || true; pm2 start server.js --name thunderdome && pm2 save"
 
-rm -f /tmp/thunderdome.tar.gz
 echo "✅ https://enterthedome.xyz"
