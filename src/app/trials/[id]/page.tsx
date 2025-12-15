@@ -6,10 +6,11 @@
 
 import { requireUser } from '@/lib/session';
 import { db } from '@/db';
-import { trials, gladiators, verdicts } from '@/db/schema';
+import { trials, gladiators, verdicts, judges } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import { BattleView } from '@/components/trials/battle-view';
+import { ResultsView } from '@/components/trials/results-view';
 
 interface PageProps {
   params: Promise<{
@@ -50,6 +51,15 @@ export default async function TrialPage({ params }: PageProps) {
     .where(eq(verdicts.trialId, trial.id))
     .limit(1);
 
+  // Load judges if trial is completed
+  const trialJudges = await db
+    .select()
+    .from(judges)
+    .where(eq(judges.trialId, trial.id));
+
+  // Determine if we should show results view
+  const isCompleted = trial.status === 'COMPLETED' && verdict;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-7xl mx-auto">
@@ -60,11 +70,20 @@ export default async function TrialPage({ params }: PageProps) {
           </p>
         </div>
 
-        <BattleView
-          trial={trial}
-          gladiators={trialGladiators}
-          verdict={verdict || null}
-        />
+        {isCompleted ? (
+          <ResultsView
+            trialId={trial.id}
+            verdict={verdict}
+            gladiators={trialGladiators}
+            judges={trialJudges}
+          />
+        ) : (
+          <BattleView
+            trial={trial}
+            gladiators={trialGladiators}
+            verdict={verdict || null}
+          />
+        )}
       </div>
     </div>
   );
