@@ -12,79 +12,69 @@
 export {
   runAgent,
   runAgentSimple,
-} from './agent.js';
+} from "./agent";
 
 // Parallel execution
 export {
   runAgentsParallel,
-  runAgentsParallelSimple,
   runAgentsParallelBatch,
-} from './parallel.js';
-
+  runAgentsParallelSimple,
+} from "./parallel";
+// Schema exports
+export {
+  type AggregatedResults,
+  // Aggregated results
+  AggregatedResultsSchema,
+  type ArbiterOutput,
+  // Arbiter schemas
+  ArbiterOutputSchema,
+  // Utility schemas
+  CostInfoSchema,
+  type ErrorResponse,
+  ErrorResponseSchema,
+  type Gladiator,
+  type GladiatorEvaluation,
+  // Evaluation schemas
+  GladiatorEvaluationSchema,
+  // Gladiator schemas
+  GladiatorSchema,
+  type Judge,
+  type JudgeOutput,
+  JudgeOutputSchema,
+  // Judge schemas
+  JudgeSchema,
+  type LanistaOutput,
+  // Lanista schemas
+  LanistaOutputSchema,
+  type ThunderdomeSession,
+  // Session schema
+  ThunderdomeSessionSchema,
+} from "./schemas";
 // Structured output with Zod
 export {
   runStructuredAgent,
   runStructuredAgentWithRetry,
-} from './structured.js';
-
+} from "./structured";
 // Type exports
 export type {
-  SDKMessage,
-  SDKMessageType,
-  SDKAssistantMessage,
-  SDKUserMessage,
-  SDKResultMessage,
-  SDKSystemMessage,
-  SDKPartialAssistantMessage,
   AgentConfig,
-  StreamEvent,
-  StreamEventType,
-  CostInfo,
   AgentResult,
+  CostInfo,
+  ModelUsage,
+  Options,
   ParallelAgentConfig,
   ParallelStreamEvent,
+  SDKAssistantMessage,
+  SDKMessage,
+  SDKMessageType,
+  SDKPartialAssistantMessage,
+  SDKResultMessage,
+  SDKSystemMessage,
+  SDKUserMessage,
+  StreamEvent,
+  StreamEventType,
   StructuredResult,
-  Options,
-  ModelUsage,
-} from './types.js';
-
-// Schema exports
-export {
-  // Gladiator schemas
-  GladiatorSchema,
-  type Gladiator,
-
-  // Lanista schemas
-  LanistaOutputSchema,
-  type LanistaOutput,
-
-  // Judge schemas
-  JudgeSchema,
-  type Judge,
-
-  // Arbiter schemas
-  ArbiterOutputSchema,
-  type ArbiterOutput,
-
-  // Evaluation schemas
-  GladiatorEvaluationSchema,
-  type GladiatorEvaluation,
-  JudgeOutputSchema,
-  type JudgeOutput,
-
-  // Aggregated results
-  AggregatedResultsSchema,
-  type AggregatedResults,
-
-  // Session schema
-  ThunderdomeSessionSchema,
-  type ThunderdomeSession,
-
-  // Utility schemas
-  CostInfoSchema,
-  ErrorResponseSchema,
-  type ErrorResponse,
-} from './schemas.js';
+} from "./types";
 
 /**
  * Validates a Claude OAuth token
@@ -93,7 +83,7 @@ export {
  * @returns True if token appears valid (basic format check)
  */
 export function validateClaudeToken(token: string): boolean {
-  if (!token || typeof token !== 'string') {
+  if (!token || typeof token !== "string") {
     return false;
   }
 
@@ -130,11 +120,11 @@ export function isAuthConfigured(): boolean {
  * Model name mappings for convenience
  */
 export const MODELS = {
-  OPUS: 'claude-opus-4',
-  SONNET: 'claude-sonnet-4',
-  HAIKU: 'claude-haiku-4',
-  OPUS_35: 'claude-opus-3-5-20241022',
-  SONNET_35: 'claude-sonnet-3-5-20241022',
+  OPUS: "claude-opus-4",
+  SONNET: "claude-sonnet-4",
+  HAIKU: "claude-haiku-4",
+  OPUS_35: "claude-opus-3-5-20241022",
+  SONNET_35: "claude-sonnet-3-5-20241022",
 } as const;
 
 /**
@@ -142,33 +132,33 @@ export const MODELS = {
  */
 export const TOOL_SETS = {
   /** Read-only tools for analysis */
-  READ_ONLY: ['Read', 'Glob', 'Grep'],
+  READ_ONLY: ["Read", "Glob", "Grep"],
 
   /** Full development tools */
-  DEVELOPMENT: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
+  DEVELOPMENT: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
 
   /** Code review tools */
-  CODE_REVIEW: ['Read', 'Glob', 'Grep'],
+  CODE_REVIEW: ["Read", "Glob", "Grep"],
 
   /** Research tools */
-  RESEARCH: ['Read', 'Glob', 'Grep', 'WebSearch', 'WebFetch'],
+  RESEARCH: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
 
   /** Testing tools */
-  TESTING: ['Read', 'Bash', 'Glob', 'Grep'],
+  TESTING: ["Read", "Bash", "Glob", "Grep"],
 
   /** All available tools */
   ALL: [
-    'Read',
-    'Write',
-    'Edit',
-    'Bash',
-    'Glob',
-    'Grep',
-    'WebSearch',
-    'WebFetch',
-    'TodoWrite',
-    'NotebookEdit',
-    'Task',
+    "Read",
+    "Write",
+    "Edit",
+    "Bash",
+    "Glob",
+    "Grep",
+    "WebSearch",
+    "WebFetch",
+    "TodoWrite",
+    "NotebookEdit",
+    "Task",
   ],
 } as const;
 
@@ -177,26 +167,26 @@ export const TOOL_SETS = {
  */
 export const PERMISSION_MODES = {
   /** Standard permission behavior (ask for approval) */
-  DEFAULT: 'default',
+  DEFAULT: "default",
 
   /** Auto-accept file edits */
-  ACCEPT_EDITS: 'acceptEdits',
+  ACCEPT_EDITS: "acceptEdits",
 
   /** Bypass all permission checks (use with caution!) */
-  BYPASS: 'bypassPermissions',
+  BYPASS: "bypassPermissions",
 
   /** Planning mode - no execution */
-  PLAN: 'plan',
+  PLAN: "plan",
 } as const;
 
 /**
  * Creates a standard agent configuration for common use cases
  */
 export function createAgentConfig(
-  type: 'development' | 'research' | 'review' | 'testing',
-  overrides: Partial<import('./types.js').AgentConfig> = {}
-): import('./types.js').AgentConfig {
-  const baseConfigs: Record<string, import('./types.js').AgentConfig> = {
+  type: "development" | "research" | "review" | "testing",
+  overrides: Partial<import("./types.js").AgentConfig> = {},
+): import("./types.js").AgentConfig {
+  const baseConfigs: Record<string, import("./types.js").AgentConfig> = {
     development: {
       model: MODELS.SONNET,
       allowedTools: [...TOOL_SETS.DEVELOPMENT],
@@ -232,7 +222,7 @@ export function createAgentConfig(
 /**
  * Utility function to format cost information
  */
-export function formatCost(cost: import('./types.js').CostInfo): string {
+export function formatCost(cost: import("./types.js").CostInfo): string {
   const parts = [
     `$${cost.totalUsd.toFixed(4)}`,
     `(${cost.inputTokens.toLocaleString()} in`,
@@ -243,22 +233,22 @@ export function formatCost(cost: import('./types.js').CostInfo): string {
     parts.push(`${cost.cacheReadTokens.toLocaleString()} cached`);
   }
 
-  return parts.join(' ') + ')';
+  return `${parts.join(" ")})`;
 }
 
 /**
  * Utility function to calculate total cost from multiple results
  */
-export function aggregateCosts(costs: import('./types.js').CostInfo[]): import('./types.js').CostInfo {
+export function aggregateCosts(
+  costs: import("./types.js").CostInfo[],
+): import("./types.js").CostInfo {
   return costs.reduce(
     (acc, cost) => ({
       totalUsd: acc.totalUsd + cost.totalUsd,
       inputTokens: acc.inputTokens + cost.inputTokens,
       outputTokens: acc.outputTokens + cost.outputTokens,
-      cacheCreationTokens:
-        (acc.cacheCreationTokens || 0) + (cost.cacheCreationTokens || 0),
-      cacheReadTokens:
-        (acc.cacheReadTokens || 0) + (cost.cacheReadTokens || 0),
+      cacheCreationTokens: (acc.cacheCreationTokens || 0) + (cost.cacheCreationTokens || 0),
+      cacheReadTokens: (acc.cacheReadTokens || 0) + (cost.cacheReadTokens || 0),
     }),
     {
       totalUsd: 0,
@@ -266,6 +256,6 @@ export function aggregateCosts(costs: import('./types.js').CostInfo[]): import('
       outputTokens: 0,
       cacheCreationTokens: 0,
       cacheReadTokens: 0,
-    }
+    },
   );
 }

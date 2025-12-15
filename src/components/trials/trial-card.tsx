@@ -5,9 +5,9 @@
  * Clickable to navigate to battle view.
  */
 
-import Link from 'next/link';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface TrialCardProps {
   trial: {
@@ -20,37 +20,37 @@ interface TrialCardProps {
 }
 
 const statusColors = {
-  PENDING: 'bg-gray-500',
-  PLANNING: 'bg-yellow-500',
-  RUNNING: 'bg-orange-500',
-  JUDGING: 'bg-purple-500',
-  COMPLETED: 'bg-green-500',
-  FAILED: 'bg-red-500',
+  PENDING: "bg-gray-500",
+  PLANNING: "bg-yellow-500",
+  RUNNING: "bg-orange-500",
+  JUDGING: "bg-purple-500",
+  COMPLETED: "bg-green-500",
+  FAILED: "bg-red-500",
 };
 
 const statusLabels = {
-  PENDING: 'Pending',
-  PLANNING: 'Planning',
-  RUNNING: 'Battling',
-  JUDGING: 'Judging',
-  COMPLETED: 'Complete',
-  FAILED: 'Failed',
+  PENDING: "Pending",
+  PLANNING: "Planning",
+  RUNNING: "Battling",
+  JUDGING: "Judging",
+  COMPLETED: "Complete",
+  FAILED: "Failed",
 };
 
 const trialTypeEmoji = {
-  GLADIATOR: '⚔️',
-  LEGION: '🏛️',
+  GLADIATOR: "⚔️",
+  LEGION: "🏛️",
 };
 
 export function TrialCard({ trial }: TrialCardProps) {
-  const statusColor = statusColors[trial.status as keyof typeof statusColors] || 'bg-gray-500';
+  const statusColor = statusColors[trial.status as keyof typeof statusColors] || "bg-gray-500";
   const statusLabel = statusLabels[trial.status as keyof typeof statusLabels] || trial.status;
-  const typeEmoji = trialTypeEmoji[trial.trialType as keyof typeof trialTypeEmoji] || '⚔️';
+  const typeEmoji = trialTypeEmoji[trial.trialType as keyof typeof trialTypeEmoji] || "⚔️";
 
   // Truncate challenge prompt for preview
   const preview =
     trial.challengePrompt.length > 150
-      ? trial.challengePrompt.slice(0, 150) + '...'
+      ? `${trial.challengePrompt.slice(0, 150)}...`
       : trial.challengePrompt;
 
   return (

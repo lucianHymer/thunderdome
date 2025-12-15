@@ -5,12 +5,12 @@
  * DELETE /api/settings/claude-token - Remove Claude API token
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/session";
-import { encrypt, decrypt } from "@/lib/encryption";
+import { eq } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { encrypt } from "@/lib/encryption";
+import { requireUser } from "@/lib/session";
 
 /**
  * POST - Save Claude API token (encrypted)
@@ -39,12 +39,8 @@ export async function POST(request: NextRequest) {
       .where(eq(users.id, user.id));
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Error saving Claude token:", error);
-    return NextResponse.json(
-      { error: "Failed to save token" },
-      { status: 500 }
-    );
+  } catch (_error) {
+    return NextResponse.json({ error: "Failed to save token" }, { status: 500 });
   }
 }
 
@@ -65,12 +61,8 @@ export async function DELETE() {
       .where(eq(users.id, user.id));
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Error deleting Claude token:", error);
-    return NextResponse.json(
-      { error: "Failed to delete token" },
-      { status: 500 }
-    );
+  } catch (_error) {
+    return NextResponse.json({ error: "Failed to delete token" }, { status: 500 });
   }
 }
 
@@ -90,11 +82,7 @@ export async function GET() {
     return NextResponse.json({
       hasToken: !!userRecord?.claudeToken,
     });
-  } catch (error) {
-    console.error("Error checking Claude token:", error);
-    return NextResponse.json(
-      { error: "Failed to check token" },
-      { status: 500 }
-    );
+  } catch (_error) {
+    return NextResponse.json({ error: "Failed to check token" }, { status: 500 });
   }
 }

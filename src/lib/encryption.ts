@@ -5,13 +5,13 @@
  * Uses the ENCRYPTION_KEY environment variable.
  */
 
-import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 16; // AES block size
 const SALT_LENGTH = 64;
-const TAG_LENGTH = 16;
-const KEY_LENGTH = 32; // 256 bits
+const _TAG_LENGTH = 16;
+const _KEY_LENGTH = 32; // 256 bits
 
 /**
  * Get the encryption key from environment variable
@@ -60,7 +60,7 @@ export function decrypt(encryptedText: string): string {
     throw new Error("Invalid encrypted text format");
   }
 
-  const [ivHex, saltHex, tagHex, encryptedData] = parts;
+  const [ivHex, _saltHex, tagHex, encryptedData] = parts;
 
   const iv = Buffer.from(ivHex, "hex");
   const tag = Buffer.from(tagHex, "hex");

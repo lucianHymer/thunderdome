@@ -27,10 +27,7 @@ const gladiatorSubscribers = new Map<string, Map<string, Subscriber>>();
  * Subscribe to trial updates
  * Returns a ReadableStream for SSE
  */
-export function subscribeToTrial(
-  trialId: string,
-  userId: string
-): ReadableStream {
+export function subscribeToTrial(trialId: string, userId: string): ReadableStream {
   const subscriberId = crypto.randomUUID();
 
   const stream = new ReadableStream({
@@ -40,7 +37,7 @@ export function subscribeToTrial(
         subscribers.set(trialId, new Map());
       }
 
-      subscribers.get(trialId)!.set(subscriberId, {
+      subscribers.get(trialId)?.set(subscriberId, {
         controller,
         userId,
       });
@@ -66,10 +63,7 @@ export function subscribeToTrial(
 /**
  * Unsubscribe from trial updates
  */
-export function unsubscribeFromTrial(
-  trialId: string,
-  subscriberId: string
-): void {
+export function unsubscribeFromTrial(trialId: string, subscriberId: string): void {
   const trialSubscribers = subscribers.get(trialId);
   if (trialSubscribers) {
     trialSubscribers.delete(subscriberId);
@@ -87,7 +81,7 @@ export function unsubscribeFromTrial(
  */
 export async function broadcastTrialUpdate(
   trialId: string,
-  event: TrialUpdateEvent
+  event: TrialUpdateEvent,
 ): Promise<void> {
   const trialSubscribers = subscribers.get(trialId);
 
@@ -109,12 +103,7 @@ export async function broadcastTrialUpdate(
   for (const [subscriberId, subscriber] of trialSubscribers.entries()) {
     try {
       subscriber.controller.enqueue(message);
-    } catch (error) {
-      // Subscriber connection is dead, mark for removal
-      console.error(
-        `Failed to send to subscriber ${subscriberId}:`,
-        error
-      );
+    } catch (_error) {
       deadSubscribers.push(subscriberId);
     }
   }
@@ -143,7 +132,7 @@ export function closeTrialSubscriptions(trialId: string): void {
   }
 
   // Send close event and close all controllers
-  for (const [subscriberId, subscriber] of trialSubscribers.entries()) {
+  for (const [_subscriberId, subscriber] of trialSubscribers.entries()) {
     try {
       const data = JSON.stringify({
         type: "trial_closed",
@@ -152,12 +141,7 @@ export function closeTrialSubscriptions(trialId: string): void {
       });
       subscriber.controller.enqueue(`data: ${data}\n\n`);
       subscriber.controller.close();
-    } catch (error) {
-      console.error(
-        `Failed to close subscriber ${subscriberId}:`,
-        error
-      );
-    }
+    } catch (_error) {}
   }
 
   // Clear all subscribers
@@ -168,10 +152,7 @@ export function closeTrialSubscriptions(trialId: string): void {
  * Subscribe to a specific gladiator's updates
  * Returns a ReadableStream for SSE
  */
-export function subscribeToGladiator(
-  gladiatorId: string,
-  userId: string
-): ReadableStream {
+export function subscribeToGladiator(gladiatorId: string, userId: string): ReadableStream {
   const subscriberId = crypto.randomUUID();
 
   const stream = new ReadableStream({
@@ -181,7 +162,7 @@ export function subscribeToGladiator(
         gladiatorSubscribers.set(gladiatorId, new Map());
       }
 
-      gladiatorSubscribers.get(gladiatorId)!.set(subscriberId, {
+      gladiatorSubscribers.get(gladiatorId)?.set(subscriberId, {
         controller,
         userId,
       });
@@ -207,10 +188,7 @@ export function subscribeToGladiator(
 /**
  * Unsubscribe from gladiator updates
  */
-export function unsubscribeFromGladiator(
-  gladiatorId: string,
-  subscriberId: string
-): void {
+export function unsubscribeFromGladiator(gladiatorId: string, subscriberId: string): void {
   const subscribers = gladiatorSubscribers.get(gladiatorId);
   if (subscribers) {
     subscribers.delete(subscriberId);
@@ -227,7 +205,7 @@ export function unsubscribeFromGladiator(
  */
 export async function broadcastGladiatorUpdate(
   gladiatorId: string,
-  event: TrialUpdateEvent
+  event: TrialUpdateEvent,
 ): Promise<void> {
   const subscribers = gladiatorSubscribers.get(gladiatorId);
 
@@ -249,12 +227,7 @@ export async function broadcastGladiatorUpdate(
   for (const [subscriberId, subscriber] of subscribers.entries()) {
     try {
       subscriber.controller.enqueue(message);
-    } catch (error) {
-      // Subscriber connection is dead, mark for removal
-      console.error(
-        `Failed to send to gladiator subscriber ${subscriberId}:`,
-        error
-      );
+    } catch (_error) {
       deadSubscribers.push(subscriberId);
     }
   }
@@ -283,7 +256,7 @@ export function closeGladiatorSubscriptions(gladiatorId: string): void {
   }
 
   // Send close event and close all controllers
-  for (const [subscriberId, subscriber] of subscribers.entries()) {
+  for (const [_subscriberId, subscriber] of subscribers.entries()) {
     try {
       const data = JSON.stringify({
         type: "gladiator_closed",
@@ -292,12 +265,7 @@ export function closeGladiatorSubscriptions(gladiatorId: string): void {
       });
       subscriber.controller.enqueue(`data: ${data}\n\n`);
       subscriber.controller.close();
-    } catch (error) {
-      console.error(
-        `Failed to close gladiator subscriber ${subscriberId}:`,
-        error
-      );
-    }
+    } catch (_error) {}
   }
 
   // Clear all subscribers

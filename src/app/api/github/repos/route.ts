@@ -4,11 +4,11 @@
  * GET /api/github/repos - Fetch user's GitHub repositories
  */
 
-import { NextResponse } from 'next/server';
-import { requireUser } from '@/lib/session';
-import { db } from '@/db';
-import { users, accounts } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { and, eq } from "drizzle-orm";
+import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { accounts } from "@/db/schema";
+import { requireUser } from "@/lib/session";
 
 /**
  * GitHub repository response type
@@ -40,38 +40,37 @@ export async function GET() {
     const [account] = await db
       .select()
       .from(accounts)
-      .where(and(eq(accounts.userId, user.id), eq(accounts.provider, 'github')))
+      .where(and(eq(accounts.userId, user.id), eq(accounts.provider, "github")))
       .limit(1);
 
     if (!account?.access_token) {
       return NextResponse.json(
-        { error: 'GitHub access token not found. Please reconnect your GitHub account.' },
-        { status: 401 }
+        { error: "GitHub access token not found. Please reconnect your GitHub account." },
+        { status: 401 },
       );
     }
 
     // Fetch repositories from GitHub API
-    const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=100', {
+    const response = await fetch("https://api.github.com/user/repos?sort=updated&per_page=100", {
       headers: {
         Authorization: `Bearer ${account.access_token}`,
-        Accept: 'application/vnd.github.v3+json',
+        Accept: "application/vnd.github.v3+json",
       },
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('GitHub API error:', response.status, errorText);
+      const _errorText = await response.text();
 
       if (response.status === 401) {
         return NextResponse.json(
-          { error: 'GitHub token is invalid or expired. Please reconnect your GitHub account.' },
-          { status: 401 }
+          { error: "GitHub token is invalid or expired. Please reconnect your GitHub account." },
+          { status: 401 },
         );
       }
 
       return NextResponse.json(
-        { error: 'Failed to fetch repositories from GitHub' },
-        { status: response.status }
+        { error: "Failed to fetch repositories from GitHub" },
+        { status: response.status },
       );
     }
 
@@ -93,11 +92,7 @@ export async function GET() {
     }));
 
     return NextResponse.json({ repos: transformedRepos });
-  } catch (error) {
-    console.error('Error fetching GitHub repos:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch repositories' },
-      { status: 500 }
-    );
+  } catch (_error) {
+    return NextResponse.json({ error: "Failed to fetch repositories" }, { status: 500 });
   }
 }

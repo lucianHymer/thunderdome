@@ -2,7 +2,7 @@
  * Prompts for the Lanista - the AI that designs gladiators for each trial
  */
 
-import { GLADIATOR_TEMPLATES } from './templates.js';
+import { GLADIATOR_TEMPLATES } from "./templates";
 
 /**
  * System prompt explaining the Lanista's role and capabilities
@@ -25,10 +25,10 @@ You can use these standard archetypes as inspiration (but feel free to create cu
 
 ${GLADIATOR_TEMPLATES.map(
   (t) => `- **${t.name}**: ${t.description}
-  Suitable for: ${t.suitableFor.join(', ')}
-  Typical tools: ${t.typicalTools.join(', ')}
-  Temperature range: ${t.temperatureRange.min}-${t.temperatureRange.max}`
-).join('\n\n')}
+  Suitable for: ${t.suitableFor.join(", ")}
+  Typical tools: ${t.typicalTools.join(", ")}
+  Temperature range: ${t.temperatureRange.min}-${t.temperatureRange.max}`,
+).join("\n\n")}
 
 # GLADIATOR CONFIGURATION
 
@@ -84,15 +84,13 @@ You must respond with valid JSON matching this structure:
  */
 export function LANISTA_USER_PROMPT(
   challenge: string,
-  trialType: 'GLADIATOR' | 'LEGION',
-  repoContext?: string
+  trialType: "GLADIATOR" | "LEGION",
+  repoContext?: string,
 ): string {
-  const contextSection = repoContext
-    ? `\n\n# REPOSITORY CONTEXT\n\n${repoContext}\n`
-    : '';
+  const contextSection = repoContext ? `\n\n# REPOSITORY CONTEXT\n\n${repoContext}\n` : "";
 
   const trialTypeGuidance =
-    trialType === 'GLADIATOR'
+    trialType === "GLADIATOR"
       ? `This is a **GLADIATOR trial** - individual AI agents competing with different approaches to find the best solution.
 
 Design gladiators with distinct, even opposing perspectives. Create tension through diversity of approach.`

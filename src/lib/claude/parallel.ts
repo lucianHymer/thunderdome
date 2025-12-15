@@ -2,13 +2,13 @@
  * Parallel agent execution functionality
  */
 
-import { runAgent } from './agent.js';
+import { runAgent } from "./agent";
 import type {
+  AgentResult,
   ParallelAgentConfig,
   ParallelStreamEvent,
-  AgentResult,
   StreamEvent,
-} from './types.js';
+} from "./types";
 
 /**
  * Runs multiple agents in parallel and yields events from all of them
@@ -32,7 +32,7 @@ import type {
  */
 export async function* runAgentsParallel(
   agents: ParallelAgentConfig[],
-  oauthToken?: string
+  oauthToken?: string,
 ): AsyncGenerator<ParallelStreamEvent, Map<string, AgentResult>, unknown> {
   const results = new Map<string, AgentResult>();
   const generators = new Map<string, AsyncGenerator<StreamEvent, AgentResult, unknown>>();
@@ -73,7 +73,7 @@ export async function* runAgentsParallel(
       promises.map(async ({ agentId, promise }) => ({
         agentId,
         result: await promise,
-      }))
+      })),
     );
 
     const { agentId, result } = winner;
@@ -116,9 +116,9 @@ export async function* runAgentsParallel(
  */
 export async function runAgentsParallelSimple(
   agents: ParallelAgentConfig[],
-  oauthToken?: string
+  oauthToken?: string,
 ): Promise<Map<string, AgentResult>> {
-  const results = new Map<string, AgentResult>();
+  const _results = new Map<string, AgentResult>();
   const generator = runAgentsParallel(agents, oauthToken);
 
   // Consume all events
@@ -148,7 +148,7 @@ export async function runAgentsParallelSimple(
  */
 export async function runAgentsParallelBatch(
   agents: ParallelAgentConfig[],
-  oauthToken?: string
+  oauthToken?: string,
 ): Promise<Map<string, AgentResult>> {
   const promises = agents.map(async (agent) => {
     const { id, prompt, ...config } = agent;
@@ -161,15 +161,15 @@ export async function runAgentsParallelBatch(
     }
 
     // Build result from events
-    const finalEvent = events.find((e) => e.type === 'result');
+    const finalEvent = events.find((e) => e.type === "result");
     if (!finalEvent) {
       throw new Error(`Agent ${id} did not produce a result`);
     }
 
     const resultContent = finalEvent.content as any;
     const result: AgentResult = {
-      success: resultContent.subtype === 'success',
-      content: resultContent.result || '',
+      success: resultContent.subtype === "success",
+      content: resultContent.result || "",
       events,
       cost: {
         totalUsd: resultContent.total_cost_usd || 0,
@@ -182,10 +182,10 @@ export async function runAgentsParallelBatch(
       turns: resultContent.num_turns || 0,
       sessionId: finalEvent.metadata?.sessionId,
       durationMs: resultContent.duration_ms,
-      maxTurnsReached: resultContent.subtype === 'error_max_turns',
-      budgetExceeded: resultContent.subtype === 'error_max_budget_usd',
+      maxTurnsReached: resultContent.subtype === "error_max_turns",
+      budgetExceeded: resultContent.subtype === "error_max_budget_usd",
       error: resultContent.is_error
-        ? resultContent.errors?.join(', ') || 'Unknown error'
+        ? resultContent.errors?.join(", ") || "Unknown error"
         : undefined,
     };
 

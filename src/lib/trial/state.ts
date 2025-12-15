@@ -7,19 +7,13 @@
  *                                  failed
  */
 
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { trials } from "@/db/schema";
-import { eq } from "drizzle-orm";
 import { broadcastTrialUpdate } from "./broadcast";
 
 // Trial status enum matching the database schema
-export type TrialStatus =
-  | "PENDING"
-  | "PLANNING"
-  | "RUNNING"
-  | "JUDGING"
-  | "COMPLETED"
-  | "FAILED";
+export type TrialStatus = "PENDING" | "PLANNING" | "RUNNING" | "JUDGING" | "COMPLETED" | "FAILED";
 
 // Map the state machine states to database statuses
 export const STATE_MAPPING = {
@@ -50,10 +44,7 @@ export type TrialState = keyof typeof STATE_TRANSITIONS;
 /**
  * Check if a state transition is valid
  */
-export function isValidTransition(
-  currentState: TrialState,
-  nextState: TrialState
-): boolean {
+export function isValidTransition(currentState: TrialState, nextState: TrialState): boolean {
   const validNextStates = STATE_TRANSITIONS[currentState];
   return validNextStates.includes(nextState);
 }
@@ -72,14 +63,10 @@ export function getStatusForState(state: TrialState): TrialStatus {
 export async function transitionTrialState(
   trialId: string,
   nextState: TrialState,
-  metadata?: Record<string, any>
+  metadata?: Record<string, any>,
 ): Promise<void> {
   // Get current trial
-  const [trial] = await db
-    .select()
-    .from(trials)
-    .where(eq(trials.id, trialId))
-    .limit(1);
+  const [trial] = await db.select().from(trials).where(eq(trials.id, trialId)).limit(1);
 
   if (!trial) {
     throw new Error(`Trial ${trialId} not found`);
@@ -100,9 +87,7 @@ export async function transitionTrialState(
 
   // Validate transition
   if (!isValidTransition(currentState, nextState)) {
-    throw new Error(
-      `Invalid state transition: ${currentState} → ${nextState}`
-    );
+    throw new Error(`Invalid state transition: ${currentState} → ${nextState}`);
   }
 
   // Get the database status for the next state

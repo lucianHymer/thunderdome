@@ -4,22 +4,19 @@
  * GET /api/gladiators/[id]/stream - Server-Sent Events stream for gladiator output
  */
 
-import { NextRequest } from 'next/server';
-import { getCurrentUser } from '@/lib/session';
-import { db } from '@/db';
-import { gladiators, trials } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq } from "drizzle-orm";
+import type { NextRequest } from "next/server";
+import { db } from "@/db";
+import { gladiators, trials } from "@/db/schema";
+import { getCurrentUser } from "@/lib/session";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getCurrentUser();
   if (!user) {
-    return new Response('Unauthorized', { status: 401 });
+    return new Response("Unauthorized", { status: 401 });
   }
 
   // Verify gladiator exists and user owns the trial
@@ -34,7 +31,7 @@ export async function GET(
     .limit(1);
 
   if (!gladiator || gladiator.trial.userId !== user.id) {
-    return new Response('Not found', { status: 404 });
+    return new Response("Not found", { status: 404 });
   }
 
   // Set up SSE stream
@@ -43,8 +40,8 @@ export async function GET(
     async start(controller) {
       // Send initial connection event
       const message = `data: ${JSON.stringify({
-        type: 'connected',
-        content: 'Connected to gladiator stream',
+        type: "connected",
+        content: "Connected to gladiator stream",
         timestamp: Date.now(),
       })}\n\n`;
       controller.enqueue(encoder.encode(message));
@@ -84,17 +81,17 @@ export async function GET(
 
           // Send status updates
           const statusEvent = `event: status\ndata: ${JSON.stringify({
-            type: 'status',
+            type: "status",
             content: currentGladiator.status,
             timestamp: Date.now(),
           })}\n\n`;
           controller.enqueue(encoder.encode(statusEvent));
 
           // If gladiator is done, send complete event and close
-          if (currentGladiator.status === 'COMPLETED' || currentGladiator.status === 'FAILED') {
+          if (currentGladiator.status === "COMPLETED" || currentGladiator.status === "FAILED") {
             const completeEvent = `event: complete\ndata: ${JSON.stringify({
-              type: 'complete',
-              content: currentGladiator.responseContent || '',
+              type: "complete",
+              content: currentGladiator.responseContent || "",
               timestamp: Date.now(),
             })}\n\n`;
             controller.enqueue(encoder.encode(completeEvent));
@@ -102,10 +99,9 @@ export async function GET(
             setTimeout(() => controller.close(), 1000);
           }
         } catch (error) {
-          console.error('Error in gladiator stream:', error);
           const errorEvent = `event: error_event\ndata: ${JSON.stringify({
-            type: 'error',
-            content: error instanceof Error ? error.message : 'Unknown error',
+            type: "error",
+            content: error instanceof Error ? error.message : "Unknown error",
             timestamp: Date.now(),
           })}\n\n`;
           controller.enqueue(encoder.encode(errorEvent));
@@ -115,7 +111,7 @@ export async function GET(
       }, 1000);
 
       // Clean up on close
-      request.signal.addEventListener('abort', () => {
+      request.signal.addEventListener("abort", () => {
         clearInterval(interval);
         controller.close();
       });
@@ -124,9 +120,9 @@ export async function GET(
 
   return new Response(stream, {
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
     },
   });
 }

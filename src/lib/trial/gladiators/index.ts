@@ -5,29 +5,21 @@
  * and handles completion/failure states.
  */
 
-import { eq } from 'drizzle-orm';
-import { db } from '../../../db/index.js';
-import { trials, gladiators as gladiatorsTable } from '../../../db/schema.js';
+import { eq } from "drizzle-orm";
+import { db } from "../../../db/index";
+import { gladiators as gladiatorsTable, trials } from "../../../db/schema";
 import {
-  runAgent,
-  MODELS,
-  aggregateCosts,
   type AgentConfig,
-  type StreamEvent,
   type AgentResult,
+  aggregateCosts,
   type CostInfo,
-} from '../../claude/index.js';
-import { transitionTrialState } from '../state.js';
-import {
-  broadcastTrialUpdate,
-  broadcastGladiatorUpdate,
-} from '../broadcast.js';
-import {
-  buildCodeBattlePrompt,
-  buildTaskPrompt,
-  buildGladiatorUserPrompt,
-} from './prompts.js';
-import { withTimeout, TimeoutError } from './timeout.js';
+  runAgent,
+  type StreamEvent,
+} from "../../claude/index";
+import { broadcastGladiatorUpdate, broadcastTrialUpdate } from "../broadcast";
+import { transitionTrialState } from "../state";
+import { buildCodeBattlePrompt, buildGladiatorUserPrompt, buildTaskPrompt } from "./prompts";
+import { TimeoutError, withTimeout } from "./timeout";
 
 /**
  * Default timeout for gladiator execution (30 minutes)
@@ -51,7 +43,7 @@ interface GladiatorRecord {
   temperature: number;
   tools: string;
   branchName: string;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
   responseContent: string | null;
   streamLog: string | null;
 }
@@ -71,7 +63,7 @@ async function runSingleGladiator(
   trial: any,
   oauthToken: string,
   workingDirectory?: string,
-  repoContext?: string
+  repoContext?: string,
 ): Promise<AgentResult> {
   const events: StreamEvent[] = [];
 
@@ -79,19 +71,19 @@ async function runSingleGladiator(
     // Mark gladiator as running
     await db
       .update(gladiatorsTable)
-      .set({ status: 'RUNNING' })
+      .set({ status: "RUNNING" })
       .where(eq(gladiatorsTable.id, gladiator.id));
 
     // Broadcast gladiator start
     await broadcastGladiatorUpdate(gladiator.id, {
-      type: 'gladiator_started',
+      type: "gladiator_started",
       gladiatorId: gladiator.id,
       name: gladiator.name,
       timestamp: new Date().toISOString(),
     });
 
     await broadcastTrialUpdate(trial.id, {
-      type: 'gladiator_started',
+      type: "gladiator_started",
       gladiatorId: gladiator.id,
       gladiatorName: gladiator.name,
       timestamp: new Date().toISOString(),
@@ -106,17 +98,17 @@ async function runSingleGladiator(
           trial.challengePrompt,
           gladiator.name,
           gladiator.persona,
-          JSON.parse(gladiator.tools).join(', '), // Use tools as focus if no explicit focus
+          JSON.parse(gladiator.tools).join(", "), // Use tools as focus if no explicit focus
           trial.trialType,
           repoContext,
-          workingDirectory
+          workingDirectory,
         )
       : buildTaskPrompt(
           trial.challengePrompt,
           gladiator.name,
           gladiator.persona,
-          JSON.parse(gladiator.tools).join(', '),
-          trial.trialType
+          JSON.parse(gladiator.tools).join(", "),
+          trial.trialType,
         );
 
     // Build user prompt
@@ -130,7 +122,7 @@ async function runSingleGladiator(
       maxTurns: DEFAULT_MAX_TURNS,
       allowedTools: tools,
       cwd: workingDirectory,
-      permissionMode: 'bypassPermissions', // Gladiators run autonomously
+      permissionMode: "bypassPermissions", // Gladiators run autonomously
     };
 
     // Run gladiator with timeout
@@ -142,16 +134,16 @@ async function runSingleGladiator(
 
       // Broadcast event to SSE subscribers
       await broadcastGladiatorUpdate(gladiator.id, {
-        type: 'gladiator_event',
+        type: "gladiator_event",
         eventType: event.type,
         content: event.content,
         timestamp: event.timestamp.toISOString(),
       });
 
       // Also broadcast summary events to trial subscribers
-      if (event.type === 'assistant' || event.type === 'result') {
+      if (event.type === "assistant" || event.type === "result") {
         await broadcastTrialUpdate(trial.id, {
-          type: 'gladiator_progress',
+          type: "gladiator_progress",
           gladiatorId: gladiator.id,
           gladiatorName: gladiator.name,
           eventType: event.type,
@@ -161,15 +153,15 @@ async function runSingleGladiator(
     }
 
     // Get result from the generator's return value
-    const finalEvent = events.find((e) => e.type === 'result');
+    const finalEvent = events.find((e) => e.type === "result");
     if (!finalEvent) {
-      throw new Error('Agent execution did not produce a result');
+      throw new Error("Agent execution did not produce a result");
     }
 
     const resultContent = finalEvent.content as any;
     const result: AgentResult = {
-      success: resultContent.subtype === 'success',
-      content: resultContent.result || '',
+      success: resultContent.subtype === "success",
+      content: resultContent.result || "",
       events,
       cost: {
         totalUsd: resultContent.total_cost_usd || 0,
@@ -182,10 +174,10 @@ async function runSingleGladiator(
       turns: resultContent.num_turns || 0,
       sessionId: finalEvent.metadata?.sessionId,
       durationMs: resultContent.duration_ms,
-      maxTurnsReached: resultContent.subtype === 'error_max_turns',
-      budgetExceeded: resultContent.subtype === 'error_max_budget_usd',
+      maxTurnsReached: resultContent.subtype === "error_max_turns",
+      budgetExceeded: resultContent.subtype === "error_max_budget_usd",
       error: resultContent.is_error
-        ? resultContent.errors?.join(', ') || 'Unknown error'
+        ? resultContent.errors?.join(", ") || "Unknown error"
         : undefined,
     };
 
@@ -193,21 +185,21 @@ async function runSingleGladiator(
     await db
       .update(gladiatorsTable)
       .set({
-        status: result.success ? 'COMPLETED' : 'FAILED',
+        status: result.success ? "COMPLETED" : "FAILED",
         responseContent: result.content,
         streamLog: JSON.stringify(
           events.map((e) => ({
             type: e.type,
             content: e.content,
             timestamp: e.timestamp.toISOString(),
-          }))
+          })),
         ),
       })
       .where(eq(gladiatorsTable.id, gladiator.id));
 
     // Broadcast completion
     await broadcastGladiatorUpdate(gladiator.id, {
-      type: result.success ? 'gladiator_completed' : 'gladiator_failed',
+      type: result.success ? "gladiator_completed" : "gladiator_failed",
       success: result.success,
       cost: result.cost,
       turns: result.turns,
@@ -216,7 +208,7 @@ async function runSingleGladiator(
     });
 
     await broadcastTrialUpdate(trial.id, {
-      type: result.success ? 'gladiator_completed' : 'gladiator_failed',
+      type: result.success ? "gladiator_completed" : "gladiator_failed",
       gladiatorId: gladiator.id,
       gladiatorName: gladiator.name,
       success: result.success,
@@ -226,36 +218,35 @@ async function runSingleGladiator(
     return result;
   } catch (error) {
     // Handle errors
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     const isTimeout = error instanceof TimeoutError;
 
     // Update database
     await db
       .update(gladiatorsTable)
       .set({
-        status: 'FAILED',
+        status: "FAILED",
         responseContent: `Error: ${errorMessage}`,
         streamLog: JSON.stringify(
           events.map((e) => ({
             type: e.type,
             content: e.content,
             timestamp: e.timestamp.toISOString(),
-          }))
+          })),
         ),
       })
       .where(eq(gladiatorsTable.id, gladiator.id));
 
     // Broadcast failure
     await broadcastGladiatorUpdate(gladiator.id, {
-      type: 'gladiator_failed',
+      type: "gladiator_failed",
       error: errorMessage,
       isTimeout,
       timestamp: new Date().toISOString(),
     });
 
     await broadcastTrialUpdate(trial.id, {
-      type: 'gladiator_failed',
+      type: "gladiator_failed",
       gladiatorId: gladiator.id,
       gladiatorName: gladiator.name,
       error: errorMessage,
@@ -266,7 +257,7 @@ async function runSingleGladiator(
     // Return error result
     return {
       success: false,
-      content: '',
+      content: "",
       events,
       cost: { totalUsd: 0, inputTokens: 0, outputTokens: 0 },
       turns: 0,
@@ -286,7 +277,7 @@ async function runSingleGladiator(
 export async function runGladiators(
   trialId: string,
   oauthToken: string,
-  timeoutMs: number = DEFAULT_GLADIATOR_TIMEOUT_MS
+  timeoutMs: number = DEFAULT_GLADIATOR_TIMEOUT_MS,
 ): Promise<Map<string, AgentResult>> {
   try {
     // Fetch trial
@@ -309,7 +300,7 @@ export async function runGladiators(
 
     // Broadcast battle start
     await broadcastTrialUpdate(trialId, {
-      type: 'battle_started',
+      type: "battle_started",
       gladiatorCount: gladiatorRecords.length,
       gladiators: gladiatorRecords.map((g) => ({
         id: g.id,
@@ -327,10 +318,10 @@ export async function runGladiators(
           trial,
           oauthToken,
           undefined, // TODO: Set working directory from repo setup
-          undefined // TODO: Get repo context from repoSetups table
+          undefined, // TODO: Get repo context from repoSetups table
         ),
         timeoutMs,
-        `Gladiator ${gladiator.name} timed out after ${timeoutMs}ms`
+        `Gladiator ${gladiator.name} timed out after ${timeoutMs}ms`,
       );
 
       return { gladiatorId: gladiator.id, result };
@@ -346,7 +337,7 @@ export async function runGladiators(
     let failureCount = 0;
 
     for (const promiseResult of results) {
-      if (promiseResult.status === 'fulfilled') {
+      if (promiseResult.status === "fulfilled") {
         const { gladiatorId, result } = promiseResult.value;
         resultsMap.set(gladiatorId, result);
         costs.push(result.cost);
@@ -367,7 +358,7 @@ export async function runGladiators(
 
     // Broadcast battle completion
     await broadcastTrialUpdate(trialId, {
-      type: 'battle_completed',
+      type: "battle_completed",
       successCount,
       failureCount,
       totalCost,
@@ -375,7 +366,7 @@ export async function runGladiators(
     });
 
     // Transition to arbiter_designing state
-    await transitionTrialState(trialId, 'arbiter_designing', {
+    await transitionTrialState(trialId, "arbiter_designing", {
       gladiatorResults: {
         successCount,
         failureCount,
@@ -386,29 +377,23 @@ export async function runGladiators(
     // Kick off arbiter (dynamic import to avoid circular dependencies)
     // This will be implemented when Arbiter is ready
     try {
-      // TODO: Implement arbiter kickoff
-      // const { runArbiter } = await import('../arbiter/index.js');
-      // await runArbiter(trialId, oauthToken);
-      console.log(`Battle completed for trial ${trialId}. Arbiter TODO.`);
-    } catch (error) {
-      console.error('Failed to kick off arbiter:', error);
+    } catch (_error) {
       // Don't fail the entire trial if arbiter kickoff fails
     }
 
     return resultsMap;
   } catch (error) {
     // Trial-level error
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
     await broadcastTrialUpdate(trialId, {
-      type: 'battle_failed',
+      type: "battle_failed",
       error: errorMessage,
       timestamp: new Date().toISOString(),
     });
 
     // Transition trial to failed state
-    await transitionTrialState(trialId, 'failed', {
+    await transitionTrialState(trialId, "failed", {
       error: errorMessage,
     });
 

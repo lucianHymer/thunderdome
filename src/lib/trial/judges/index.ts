@@ -2,21 +2,18 @@
  * Judge runner - evaluates gladiator outputs and synthesizes verdict
  */
 
-import { eq } from 'drizzle-orm';
-import { db } from '../../../db/index.js';
-import { trials, gladiators, judges, verdicts } from '../../../db/schema.js';
+import { eq } from "drizzle-orm";
+import { db } from "../../../db/index";
+import { judges, trials, verdicts } from "../../../db/schema";
 import {
-  runStructuredAgentWithRetry,
-  JudgeOutput,
-  JudgeOutputSchema,
-  MODELS,
-  runAgentsParallel,
   type CostInfo,
-} from '../../claude/index.js';
-import { buildJudgeSystemPrompt, buildJudgeUserPrompt } from './prompts.js';
-import { transitionTrialState } from '../state.js';
-import { broadcastTrialUpdate } from '../broadcast.js';
-import { StatusCallback } from '../types.js';
+  type JudgeOutput,
+  JudgeOutputSchema,
+  runStructuredAgentWithRetry,
+} from "../../claude/index";
+import { transitionTrialState } from "../state";
+import type { StatusCallback } from "../types";
+import { buildJudgeSystemPrompt, buildJudgeUserPrompt } from "./prompts";
 
 /**
  * Type for a judge record from the database
@@ -61,12 +58,12 @@ async function runSingleJudge(
     responseContent: string;
   }>,
   oauthToken: string,
-  onStatus?: StatusCallback
+  onStatus?: StatusCallback,
 ): Promise<{ judgeId: string; output: JudgeOutput; cost: CostInfo }> {
   try {
     // Notify that judge is thinking
     onStatus?.({
-      type: 'judge_thinking',
+      type: "judge_thinking",
       data: {
         judgeId: judge.id,
         judgeName: judge.name,
@@ -81,11 +78,7 @@ async function runSingleJudge(
     const evaluationCriteria = storedEvaluation.evaluationCriteria || [];
 
     // Build prompts
-    const systemPrompt = buildJudgeSystemPrompt(
-      judge.name,
-      judge.focus,
-      evaluationCriteria
-    );
+    const systemPrompt = buildJudgeSystemPrompt(judge.name, judge.focus, evaluationCriteria);
     const userPrompt = buildJudgeUserPrompt(challenge, gladiatorOutputs);
 
     // Run the judge with structured output
@@ -97,19 +90,19 @@ async function runSingleJudge(
         allowedTools: [], // Judges don't need tools, just reasoning
         maxTurns: 1, // Single-turn structured output
         systemPrompt,
-        permissionMode: 'bypassPermissions',
+        permissionMode: "bypassPermissions",
       },
       2, // Max 2 retries for validation failures
-      oauthToken
+      oauthToken,
     );
 
     if (!result.success || !result.data) {
-      throw new Error(`Judge ${judge.name} failed: ${result.error || 'No data returned'}`);
+      throw new Error(`Judge ${judge.name} failed: ${result.error || "No data returned"}`);
     }
 
     // Notify that judge is complete
     onStatus?.({
-      type: 'judge_complete',
+      type: "judge_complete",
       data: {
         judgeId: judge.id,
         judgeName: judge.name,
@@ -124,11 +117,11 @@ async function runSingleJudge(
     };
   } catch (error) {
     onStatus?.({
-      type: 'judge_error',
+      type: "judge_error",
       data: {
         judgeId: judge.id,
         judgeName: judge.name,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       },
     });
     throw error;
@@ -140,18 +133,18 @@ async function runSingleJudge(
  */
 async function synthesizeVerdict(
   trialId: string,
-  challenge: string,
+  _challenge: string,
   judgeResults: Array<{
     judgeId: string;
     judgeName: string;
     output: JudgeOutput;
   }>,
   gladiatorRecords: GladiatorRecord[],
-  onStatus?: StatusCallback
+  onStatus?: StatusCallback,
 ): Promise<void> {
   try {
     onStatus?.({
-      type: 'verdict_synthesizing',
+      type: "verdict_synthesizing",
       data: {
         trialId,
         judgeCount: judgeResults.length,
@@ -190,23 +183,23 @@ async function synthesizeVerdict(
 
     // Build verdict summary
     const winnerGladiator = gladiatorRecords.find((g) => g.id === winnerId);
-    const winnerName = winnerGladiator?.name || 'Unknown';
+    const winnerName = winnerGladiator?.name || "Unknown";
 
     // Create a detailed summary
     const judgeSummaries = judgeResults
       .map((jr) => {
         const winnerEval = jr.output.evaluations.find((e) => e.gladiatorId === winnerId);
-        return `**${jr.judgeName}**: ${jr.output.summary}\n  Winner score: ${winnerEval?.score || 'N/A'}/100`;
+        return `**${jr.judgeName}**: ${jr.output.summary}\n  Winner score: ${winnerEval?.score || "N/A"}/100`;
       })
-      .join('\n\n');
+      .join("\n\n");
 
     const gladiatorScoreSummary = Object.entries(averageScores)
       .sort(([, a], [, b]) => b - a)
       .map(([gId, score]) => {
         const glad = gladiatorRecords.find((g) => g.id === gId);
-        return `- ${glad?.name || 'Unknown'}: ${score.toFixed(1)}/100`;
+        return `- ${glad?.name || "Unknown"}: ${score.toFixed(1)}/100`;
       })
-      .join('\n');
+      .join("\n");
 
     const summary = `After evaluation by ${judgeResults.length} specialized judge(s), ${winnerName} emerged as the winner with an average score of ${highestScore.toFixed(1)}/100.
 
@@ -224,9 +217,9 @@ ${judgeSummaries}`;
 ${judgeResults
   .map(
     (jr, idx) =>
-      `${idx + 1}. ${jr.judgeName}: Focused on "${jr.output.evaluations[0]?.reasoning.substring(0, 100)}..."`
+      `${idx + 1}. ${jr.judgeName}: Focused on "${jr.output.evaluations[0]?.reasoning.substring(0, 100)}..."`,
   )
-  .join('\n')}
+  .join("\n")}
 
 ${winnerName} achieved the highest average score of ${highestScore.toFixed(1)}/100 across all judges, demonstrating superior performance in the evaluated criteria.`;
 
@@ -239,7 +232,7 @@ ${winnerName} achieved the highest average score of ${highestScore.toFixed(1)}/1
     });
 
     onStatus?.({
-      type: 'verdict_complete',
+      type: "verdict_complete",
       data: {
         trialId,
         winnerGladiatorId: winnerId,
@@ -250,14 +243,14 @@ ${winnerName} achieved the highest average score of ${highestScore.toFixed(1)}/1
     });
 
     // Transition to decree phase
-    await transitionTrialState(trialId, 'decree', {
+    await transitionTrialState(trialId, "decree", {
       winnerId,
       winnerName,
       averageScore: highestScore,
     });
   } catch (error) {
     throw new Error(
-      `Failed to synthesize verdict: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to synthesize verdict: ${error instanceof Error ? error.message : "Unknown error"}`,
     );
   }
 }
@@ -276,7 +269,7 @@ export async function runJudges(
   judgeRecords: JudgeRecord[],
   gladiatorRecords: GladiatorRecord[],
   oauthToken: string,
-  onStatus?: StatusCallback
+  onStatus?: StatusCallback,
 ): Promise<void> {
   try {
     // Fetch the trial
@@ -292,12 +285,12 @@ export async function runJudges(
     const gladiatorOutputs = gladiatorRecords.map((g) => ({
       id: g.id,
       name: g.name,
-      responseContent: g.responseContent || '',
+      responseContent: g.responseContent || "",
     }));
 
     // Run all judges in parallel
     const judgePromises = judgeRecords.map((judge) =>
-      runSingleJudge(judge, trial.challengePrompt, gladiatorOutputs, oauthToken, onStatus)
+      runSingleJudge(judge, trial.challengePrompt, gladiatorOutputs, oauthToken, onStatus),
     );
 
     const judgeResults = await Promise.all(judgePromises);
@@ -324,7 +317,7 @@ export async function runJudges(
 
     // Notify that all judges are complete
     onStatus?.({
-      type: 'all_judges_complete',
+      type: "all_judges_complete",
       data: {
         trialId,
         judgeCount: judgeResults.length,
@@ -340,18 +333,18 @@ export async function runJudges(
         const judge = judgeRecords.find((j) => j.id === r.judgeId);
         return {
           judgeId: r.judgeId,
-          judgeName: judge?.name || 'Unknown Judge',
+          judgeName: judge?.name || "Unknown Judge",
           output: r.output,
         };
       }),
       gladiatorRecords,
-      onStatus
+      onStatus,
     );
   } catch (error) {
     // Transition to failed state
-    await transitionTrialState(trialId, 'failed', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      phase: 'judging',
+    await transitionTrialState(trialId, "failed", {
+      error: error instanceof Error ? error.message : "Unknown error",
+      phase: "judging",
     });
 
     throw error;

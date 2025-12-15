@@ -5,21 +5,21 @@
  * and executing decree actions.
  */
 
-'use client';
+"use client";
 
-import { useState, useRef, useEffect } from 'react';
+import { GitMerge, GitPullRequest, Loader2, Send, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
-import { Send, Loader2, GitMerge, GitPullRequest, Sparkles } from 'lucide-react';
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Verdict {
   summary: string;
@@ -35,17 +35,101 @@ interface ConsulDialogProps {
 }
 
 interface Message {
-  role: 'user' | 'consul';
+  role: "user" | "consul";
   content: string;
 }
 
 export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDialogProps) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const initializeConversation = async () => {
+    setIsStreaming(true);
+
+    try {
+      const response = await fetch(`/api/trials/${trialId}/consul`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: "__INIT__", // Special message to trigger greeting
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to initialize conversation");
+      }
+
+      await streamResponse(response);
+    } catch (_error) {
+      setMessages([
+        {
+          role: "consul",
+          content:
+            "Salutations. I am the Consul, ready to assist with decree actions. How may I help you today?",
+        },
+      ]);
+    } finally {
+      setIsStreaming(false);
+    }
+  };
+
+  const streamResponse = async (response: Response) => {
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    let accumulatedContent = "";
+
+    // Add placeholder message for streaming
+    const placeholderIndex = messages.length;
+    setMessages((prev) => [...prev, { role: "consul", content: "" }]);
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data === "[DONE]") continue;
+
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.type === "content") {
+                accumulatedContent += parsed.text;
+                // Update the placeholder message
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[placeholderIndex] = {
+                    role: "consul",
+                    content: accumulatedContent,
+                  };
+                  return newMessages;
+                });
+              }
+            } catch (_e) {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  };
 
   // Initialize conversation when dialog opens
   useEffect(() => {
@@ -62,106 +146,19 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
     }
   }, [messages]);
 
-  const initializeConversation = async () => {
-    setIsStreaming(true);
-
-    try {
-      const response = await fetch(`/api/trials/${trialId}/consul`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: '__INIT__', // Special message to trigger greeting
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to initialize conversation');
-      }
-
-      await streamResponse(response);
-    } catch (error) {
-      console.error('Error initializing conversation:', error);
-      setMessages([
-        {
-          role: 'consul',
-          content: 'Salutations. I am the Consul, ready to assist with decree actions. How may I help you today?',
-        },
-      ]);
-    } finally {
-      setIsStreaming(false);
-    }
-  };
-
-  const streamResponse = async (response: Response) => {
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-
-    if (!reader) {
-      throw new Error('No response body');
-    }
-
-    let accumulatedContent = '';
-
-    // Add placeholder message for streaming
-    const placeholderIndex = messages.length;
-    setMessages(prev => [
-      ...prev,
-      { role: 'consul', content: '' },
-    ]);
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
-
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.type === 'content') {
-                accumulatedContent += parsed.text;
-                // Update the placeholder message
-                setMessages(prev => {
-                  const newMessages = [...prev];
-                  newMessages[placeholderIndex] = {
-                    role: 'consul',
-                    content: accumulatedContent,
-                  };
-                  return newMessages;
-                });
-              }
-            } catch (e) {
-              // Ignore parse errors
-            }
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
-  };
-
   const sendMessage = async () => {
     if (!input.trim() || isStreaming) return;
 
     const userMessage = input.trim();
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setInput("");
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setIsStreaming(true);
 
     try {
       const response = await fetch(`/api/trials/${trialId}/consul`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           message: userMessage,
@@ -170,17 +167,16 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
       });
 
       if (!response.ok) {
-        throw new Error('Failed to send message');
+        throw new Error("Failed to send message");
       }
 
       await streamResponse(response);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setMessages(prev => [
+    } catch (_error) {
+      setMessages((prev) => [
         ...prev,
         {
-          role: 'consul',
-          content: 'My apologies, I encountered an error. Please try again.',
+          role: "consul",
+          content: "My apologies, I encountered an error. Please try again.",
         },
       ]);
     } finally {
@@ -194,7 +190,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
@@ -208,9 +204,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
             <span className="text-2xl">⚖️</span>
             <span>Consul</span>
           </DialogTitle>
-          <DialogDescription>
-            Discuss the verdict and execute decree actions
-          </DialogDescription>
+          <DialogDescription>Discuss the verdict and execute decree actions</DialogDescription>
         </DialogHeader>
 
         {/* Verdict Summary */}
@@ -224,27 +218,23 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
             {messages.map((message, index) => (
               <div
                 key={index}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
                   className={`max-w-[80%] rounded-lg p-3 ${
-                    message.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-muted'
+                    message.role === "user" ? "bg-blue-600 text-white" : "bg-muted"
                   }`}
                 >
-                  {message.role === 'consul' && (
+                  {message.role === "consul" && (
                     <Badge variant="outline" className="mb-2">
                       Consul
                     </Badge>
                   )}
-                  <div className="whitespace-pre-wrap text-sm">
-                    {message.content}
-                  </div>
+                  <div className="whitespace-pre-wrap text-sm">{message.content}</div>
                 </div>
               </div>
             ))}
-            {isStreaming && messages[messages.length - 1]?.role !== 'consul' && (
+            {isStreaming && messages[messages.length - 1]?.role !== "consul" && (
               <div className="flex justify-start">
                 <div className="bg-muted rounded-lg p-3">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -260,7 +250,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
             <Button
               size="sm"
               variant="outline"
-              onClick={() => handleQuickAction('Merge the winner\'s changes')}
+              onClick={() => handleQuickAction("Merge the winner's changes")}
             >
               <GitMerge className="h-3 w-3 mr-1" />
               Merge Winner
@@ -268,7 +258,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
             <Button
               size="sm"
               variant="outline"
-              onClick={() => handleQuickAction('Create a PR with the winner\'s changes')}
+              onClick={() => handleQuickAction("Create a PR with the winner's changes")}
             >
               <GitPullRequest className="h-3 w-3 mr-1" />
               Create PR
@@ -276,7 +266,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
             <Button
               size="sm"
               variant="outline"
-              onClick={() => handleQuickAction('Synthesize the best elements from both gladiators')}
+              onClick={() => handleQuickAction("Synthesize the best elements from both gladiators")}
             >
               <Sparkles className="h-3 w-3 mr-1" />
               Synthesize
@@ -295,11 +285,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
             disabled={isStreaming}
             className="flex-1"
           />
-          <Button
-            onClick={sendMessage}
-            disabled={!input.trim() || isStreaming}
-            size="icon"
-          >
+          <Button onClick={sendMessage} disabled={!input.trim() || isStreaming} size="icon">
             {isStreaming ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (

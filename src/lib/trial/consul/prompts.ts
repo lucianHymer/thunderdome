@@ -44,9 +44,8 @@ interface ConsulContext {
  * Build the Consul's system prompt
  */
 export function buildConsulSystemPrompt(context: ConsulContext): string {
-  const winnerName = context.gladiators.find(
-    g => g.id === context.verdict.winnerGladiatorId
-  )?.name || 'None';
+  const winnerName =
+    context.gladiators.find((g) => g.id === context.verdict.winnerGladiatorId)?.name || "None";
 
   return `You are the Consul, a wise and measured AI advisor in the Thunderdome trial system. Your role is to help users make informed decisions about what to do after a gladiator battle has concluded.
 
@@ -99,50 +98,50 @@ Begin by greeting the user and summarizing the verdict in a clear, actionable wa
  */
 export function buildConsulContext(context: ConsulContext): string {
   const sections = [
-    '# Trial Results\n',
+    "# Trial Results\n",
     `## Challenge\n${context.trial.challengePrompt}\n`,
     `## Verdict\n${context.verdict.summary}\n\n${context.verdict.reasoning}\n`,
   ];
 
   // Add gladiator information
-  sections.push('## Gladiators\n');
-  context.gladiators.forEach(gladiator => {
+  sections.push("## Gladiators\n");
+  context.gladiators.forEach((gladiator) => {
     const isWinner = gladiator.id === context.verdict.winnerGladiatorId;
-    sections.push(`### ${gladiator.name}${isWinner ? ' 👑 WINNER' : ''}`);
+    sections.push(`### ${gladiator.name}${isWinner ? " 👑 WINNER" : ""}`);
     sections.push(`**Persona**: ${gladiator.persona}`);
     sections.push(`**Branch**: ${gladiator.branchName}`);
-    sections.push(`**Response**:\n\`\`\`\n${gladiator.responseContent || 'No response'}\n\`\`\`\n`);
+    sections.push(`**Response**:\n\`\`\`\n${gladiator.responseContent || "No response"}\n\`\`\`\n`);
   });
 
   // Add judge evaluations
-  sections.push('## Judge Evaluations\n');
-  context.judges.forEach(judge => {
+  sections.push("## Judge Evaluations\n");
+  context.judges.forEach((judge) => {
     sections.push(`### ${judge.name} - ${judge.focus}`);
 
     if (judge.evaluation) {
       try {
         const parsed = JSON.parse(judge.evaluation);
-        sections.push(`**Summary**: ${parsed.summary || 'N/A'}\n`);
+        sections.push(`**Summary**: ${parsed.summary || "N/A"}\n`);
 
         if (parsed.evaluations && Array.isArray(parsed.evaluations)) {
           parsed.evaluations.forEach((evalData: any) => {
-            const gladiator = context.gladiators.find(g => g.id === evalData.gladiatorId);
-            sections.push(`#### ${gladiator?.name || 'Unknown'}: ${evalData.score}/10`);
+            const gladiator = context.gladiators.find((g) => g.id === evalData.gladiatorId);
+            sections.push(`#### ${gladiator?.name || "Unknown"}: ${evalData.score}/10`);
 
             if (evalData.strengths?.length > 0) {
-              sections.push('**Strengths**:');
+              sections.push("**Strengths**:");
               evalData.strengths.forEach((s: string) => sections.push(`- ${s}`));
             }
 
             if (evalData.weaknesses?.length > 0) {
-              sections.push('**Weaknesses**:');
+              sections.push("**Weaknesses**:");
               evalData.weaknesses.forEach((w: string) => sections.push(`- ${w}`));
             }
 
             if (evalData.comments) {
               sections.push(`**Comments**: ${evalData.comments}`);
             }
-            sections.push('');
+            sections.push("");
           });
         }
       } catch {
@@ -150,21 +149,20 @@ export function buildConsulContext(context: ConsulContext): string {
         sections.push(judge.evaluation);
       }
     } else {
-      sections.push('No evaluation available');
+      sections.push("No evaluation available");
     }
-    sections.push('');
+    sections.push("");
   });
 
-  return sections.join('\n');
+  return sections.join("\n");
 }
 
 /**
  * Build the initial greeting message from the Consul
  */
 export function buildConsulGreeting(context: ConsulContext): string {
-  const winnerName = context.gladiators.find(
-    g => g.id === context.verdict.winnerGladiatorId
-  )?.name || 'None';
+  const winnerName =
+    context.gladiators.find((g) => g.id === context.verdict.winnerGladiatorId)?.name || "None";
 
   return `Salutations! I am the Consul, your advisor for this trial.
 
@@ -175,13 +173,15 @@ export function buildConsulGreeting(context: ConsulContext): string {
 The judges have completed their evaluations and a verdict has been rendered. I am here to help you understand the results and decide on the appropriate decree action.
 
 **Recommended Actions**:
-${context.verdict.winnerGladiatorId
-  ? `- Merge ${winnerName}'s changes to complete the trial
+${
+  context.verdict.winnerGladiatorId
+    ? `- Merge ${winnerName}'s changes to complete the trial
 - Create a PR for team review before merging
 - Synthesize elements from multiple gladiators if the contest was close`
-  : `- Review the evaluations to understand why no clear winner emerged
+    : `- Review the evaluations to understand why no clear winner emerged
 - Consider running a new trial with adjusted parameters
-- Synthesize a solution combining the best elements`}
+- Synthesize a solution combining the best elements`
+}
 
 What would you like to do with these results?`;
 }
