@@ -194,19 +194,25 @@ Provide your response as a JSON object. You can wrap it in a markdown code block
       };
     }
 
-    // Extract and parse JSON from the result
-    const jsonText = extractJson(content);
+    // Use structured_output if SDK returned it, otherwise parse from result
     let parsed: any;
 
-    try {
-      parsed = JSON.parse(jsonText);
-    } catch (parseError) {
-      return {
-        success: false,
-        cost,
-        error: `Failed to parse JSON: ${parseError instanceof Error ? parseError.message : "Unknown error"}`,
-        rawContent: content,
-      };
+    if (resultContent.structured_output) {
+      // SDK already parsed the structured output for us
+      parsed = resultContent.structured_output;
+    } else {
+      // Fallback: extract and parse JSON from the result string
+      const jsonText = extractJson(content);
+      try {
+        parsed = JSON.parse(jsonText);
+      } catch (parseError) {
+        return {
+          success: false,
+          cost,
+          error: `Failed to parse JSON: ${parseError instanceof Error ? parseError.message : "Unknown error"}`,
+          rawContent: content,
+        };
+      }
     }
 
     // Validate against Zod schema
