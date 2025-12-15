@@ -1,20 +1,21 @@
 /**
  * Start Trial Endpoint
  *
- * POST /api/trials/:id/start - Start the trial and kick off Lanista
+ * POST /api/trials/:id/start - Start the trial and kick off Lanista or Code Battle
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/session";
 import { db } from "@/db";
-import { trials } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { trials, repoSetups, users } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import { transitionTrialState } from "@/lib/trial/state";
+import { runCodeBattle } from "@/lib/trial/code-battle/orchestrator";
+import { decrypt } from "@/lib/encryption";
 
 /**
  * POST - Start a trial
- * Transitions from PENDING to lanista_designing (PLANNING)
- * In the future, this will kick off the Lanista agent (Issue 5)
+ * Transitions from PENDING to lanista_designing (PLANNING) or starts code battle
  */
 export async function POST(
   request: NextRequest,
@@ -46,6 +47,48 @@ export async function POST(
         { error: `Trial is not pending (current status: ${trial.status})` },
         { status: 400 }
       );
+    }
+
+    // Check if this is a code battle (repo URL exists)
+    if (trial.repoUrl) {
+      // Check setup exists
+      const setup = await db.query.repoSetups.findFirst({
+        where: and(
+          eq(repoSetups.userId, user.id),
+          eq(repoSetups.repoUrl, trial.repoUrl)
+        ),
+      });
+
+      if (!setup) {
+        return NextResponse.json(
+          { error: "Repo setup required. Run Setup Discovery first." },
+          { status: 400 }
+        );
+      }
+
+      // Get full user record from database for tokens
+      const dbUser = await db.query.users.findFirst({
+        where: eq(users.id, user.id),
+      });
+
+      // Get Claude token
+      if (!dbUser?.claudeToken) {
+        return NextResponse.json(
+          { error: "Claude token required. Configure in settings." },
+          { status: 400 }
+        );
+      }
+
+      const claudeToken = decrypt(dbUser.claudeToken);
+
+      // Run code battle in background
+      runCodeBattle(trial.id, user.id, claudeToken).catch(console.error);
+
+      return NextResponse.json({
+        success: true,
+        status: "container_starting",
+        message: "Code battle starting...",
+      });
     }
 
     // Transition to lanista_designing state
