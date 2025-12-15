@@ -17,14 +17,22 @@ echo "📍 Found standalone at: $STANDALONE_ROOT"
 cp -r .next/static "$STANDALONE_ROOT/.next/"
 [ -d public ] && cp -r public "$STANDALONE_ROOT/"
 
+# Backup node_modules on server before rsync deletes it
+echo "📦 Preserving native modules..."
+ssh $SERVER "[ -d $REMOTE_DIR/node_modules/better-sqlite3 ] && mv $REMOTE_DIR/node_modules/better-sqlite3 /tmp/better-sqlite3-cache || true"
+
 echo "📤 Uploading..."
 rsync -avz --delete "$STANDALONE_ROOT/" $SERVER:$REMOTE_DIR/
 
+# Restore cached native modules
+ssh $SERVER "[ -d /tmp/better-sqlite3-cache ] && rm -rf $REMOTE_DIR/node_modules/better-sqlite3 && mv /tmp/better-sqlite3-cache $REMOTE_DIR/node_modules/better-sqlite3 || true"
+
+# Only install if not cached
+echo "🔧 Checking native modules..."
+ssh $SERVER "cd $REMOTE_DIR && node -e \"require('better-sqlite3')\" 2>/dev/null || npm install better-sqlite3 --build-from-source"
+
 # Env
 scp .env.production $SERVER:$REMOTE_DIR/.env 2>/dev/null || echo "No .env.production"
-
-echo "🔧 Installing native modules for Linux..."
-ssh $SERVER "cd $REMOTE_DIR && npm install better-sqlite3 --build-from-source"
 
 echo "🔄 Starting..."
 ssh $SERVER "cd $REMOTE_DIR && pm2 delete thunderdome 2>/dev/null || true; pm2 start server.js --name thunderdome && pm2 save"
