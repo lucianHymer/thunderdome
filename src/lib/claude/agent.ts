@@ -136,6 +136,10 @@ export async function* runAgent(
     permissionMode: config.permissionMode,
     includePartialMessages: config.includePartialMessages,
     maxBudgetUsd: config.maxBudgetUsd,
+    // Path to Claude CLI - check env var first, then common locations
+    pathToClaudeCodeExecutable:
+      process.env.CLAUDE_CLI_PATH ||
+      (process.env.HOME ? `${process.env.HOME}/.local/bin/claude` : "/usr/local/bin/claude"),
     ...config.additionalOptions,
   };
 

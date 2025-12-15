@@ -56,9 +56,11 @@ export function BattleView({ trial, gladiators, verdict }: BattleViewProps) {
   // Parse lanista plan if available
   const lanistaPlan = trial.lanistaPlan ? JSON.parse(trial.lanistaPlan) : null;
 
-  // Get error from stream events
+  // Get error from stream events OR from stored lanistaPlan
   const errorEvent = stream.events.find((e: any) => e.type === 'error' || e.type === 'lanista_error');
-  const errorMessage = errorEvent?.data?.error || (stream.lastEvent as any)?.error;
+  const errorMessage = errorEvent?.data?.error
+    || (stream.lastEvent as any)?.error
+    || lanistaPlan?.error;
 
   return (
     <div className="space-y-6">

@@ -172,8 +172,17 @@ export async function runLanista(
       },
     });
 
-    // Update trial status to FAILED
-    await db.update(trials).set({ status: "FAILED" }).where(eq(trials.id, trialId));
+    // Update trial status to FAILED and store error
+    await db
+      .update(trials)
+      .set({
+        status: "FAILED",
+        lanistaPlan: JSON.stringify({
+          error: error instanceof Error ? error.message : "Unknown error",
+          stack: error instanceof Error ? error.stack : undefined,
+        }),
+      })
+      .where(eq(trials.id, trialId));
 
     throw error;
   }
