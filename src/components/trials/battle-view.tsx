@@ -96,6 +96,28 @@ export function BattleView({ trial: initialTrial, gladiators: initialGladiators,
     || (stream.lastEvent as any)?.error
     || lanistaPlan?.error;
 
+  // Resume handler for stuck trials
+  const [isResuming, setIsResuming] = useState(false);
+  const handleResume = async () => {
+    setIsResuming(true);
+    try {
+      const response = await fetch(`/api/trials/${initialTrial.id}/resume`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        console.error("Resume failed:", data.error);
+      }
+    } catch (e) {
+      console.error("Resume failed:", e);
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
+  // Show resume button for stuck trials
+  const canResume = currentStatus !== 'COMPLETED' && currentStatus !== 'PENDING';
+
   return (
     <div className="space-y-6">
       {/* Challenge Display */}
@@ -112,7 +134,21 @@ export function BattleView({ trial: initialTrial, gladiators: initialGladiators,
       </Card>
 
       {/* Status Banner */}
-      <StatusBanner status={currentStatus} message={(stream.lastEvent as any)?.message} />
+      <div className="flex items-center gap-4">
+        <div className="flex-1">
+          <StatusBanner status={currentStatus} message={(stream.lastEvent as any)?.message} />
+        </div>
+        {canResume && (
+          <button
+            type="button"
+            onClick={handleResume}
+            disabled={isResuming}
+            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 rounded-lg text-sm font-medium"
+          >
+            {isResuming ? "Resuming..." : "Resume Trial"}
+          </button>
+        )}
+      </div>
 
       {/* Error Display */}
       {(errorMessage || stream.error || currentStatus === 'FAILED') && (
