@@ -7,6 +7,11 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
+import { createRequire } from "module";
+
+// Resolve CLI path dynamically to handle different deployment environments
+const require = createRequire(import.meta.url);
+const CLI_PATH = require.resolve("@anthropic-ai/claude-agent-sdk/cli.js");
 import { db } from "@/db";
 import { decrees, gladiators, judges, trials, users, verdicts } from "@/db/schema";
 import { decrypt } from "@/lib/encryption";
@@ -121,6 +126,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               model: "sonnet",
               maxTurns: 5,
               allowedTools: [], // No tools for Consul
+              pathToClaudeCodeExecutable: CLI_PATH,
             },
           });
 
