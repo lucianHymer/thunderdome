@@ -6,9 +6,10 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { ScrollableContainer } from "@/components/ui/scrollable-container";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -41,16 +42,6 @@ export function SetupDiscovery({
   const [error, setError] = useState<string | null>(null);
   const [cost, setCost] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
-
-  const streamLogRef = useRef<HTMLDivElement>(null);
-  const _eventSourceRef = useRef<EventSource | null>(null);
-
-  // Auto-scroll stream log
-  useEffect(() => {
-    if (streamLogRef.current) {
-      streamLogRef.current.scrollTop = streamLogRef.current.scrollHeight;
-    }
-  }, []);
 
   const startDiscovery = async () => {
     setStatus("running");
@@ -204,16 +195,16 @@ export function SetupDiscovery({
           <p className="text-sm text-muted-foreground mb-4">
             Claude is analyzing the repository and creating setup files.
           </p>
-          <div
-            ref={streamLogRef}
-            className="bg-black/50 rounded-lg p-4 font-mono text-xs h-[400px] overflow-y-auto space-y-1"
+          <ScrollableContainer
+            scrollTrigger={streamLog}
+            className="bg-black/50 rounded-lg p-4 font-mono text-xs h-[400px] space-y-1"
           >
             {streamLog.map((log, index) => (
               <div key={index} className="text-gray-300">
                 {log}
               </div>
             ))}
-          </div>
+          </ScrollableContainer>
         </div>
       </div>
     );
@@ -238,13 +229,16 @@ export function SetupDiscovery({
         </div>
         <div className="border border-border rounded-lg p-4">
           <h4 className="text-sm font-semibold mb-2">Discovery Log</h4>
-          <div className="bg-black/50 rounded-lg p-4 font-mono text-xs max-h-[200px] overflow-y-auto space-y-1">
+          <ScrollableContainer
+            scrollTrigger={streamLog}
+            className="bg-black/50 rounded-lg p-4 font-mono text-xs max-h-[200px] space-y-1"
+          >
             {streamLog.map((log, index) => (
               <div key={index} className="text-gray-300">
                 {log}
               </div>
             ))}
-          </div>
+          </ScrollableContainer>
         </div>
       </div>
     );
@@ -306,13 +300,16 @@ export function SetupDiscovery({
         </TabsContent>
 
         <TabsContent value="log">
-          <div className="bg-black/50 rounded-lg p-4 font-mono text-xs max-h-[400px] overflow-y-auto space-y-1">
+          <ScrollableContainer
+            scrollTrigger={streamLog}
+            className="bg-black/50 rounded-lg p-4 font-mono text-xs max-h-[400px] space-y-1"
+          >
             {streamLog.map((log, index) => (
               <div key={index} className="text-gray-300">
                 {log}
               </div>
             ))}
-          </div>
+          </ScrollableContainer>
         </TabsContent>
       </Tabs>
 

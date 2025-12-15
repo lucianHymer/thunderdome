@@ -11,7 +11,6 @@ import { GitMerge, GitPullRequest, Loader2, Send, Sparkles } from "lucide-react"
 import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Markdown } from "@/components/ui/markdown";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +18,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Markdown } from "@/components/ui/markdown";
+import { ScrollableContainer } from "@/components/ui/scrollable-container";
 import { Textarea } from "@/components/ui/textarea";
 
 interface Verdict {
@@ -44,7 +45,6 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [initialized, setInitialized] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const initializeConversation = async () => {
@@ -146,13 +146,6 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
     }
   }, [open, initialized]);
 
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
   const sendMessage = async () => {
     if (!input.trim() || isStreaming) return;
 
@@ -218,7 +211,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col gap-4">
+      <DialogContent className="max-w-4xl h-[85vh] flex flex-col gap-4 overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="text-2xl">⚖️</span>
@@ -234,7 +227,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
         </div>
 
         {/* Messages */}
-        <div className="flex-1 min-h-[200px] max-h-[400px] overflow-y-auto pr-2" ref={scrollRef}>
+        <ScrollableContainer scrollTrigger={messages} className="flex-1 pr-2">
           <div className="space-y-4">
             {messages.map((message, index) => (
               <div
@@ -269,7 +262,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
               </div>
             )}
           </div>
-        </div>
+        </ScrollableContainer>
 
         {/* Quick Actions */}
         {!isStreaming && messages.length > 0 && (
