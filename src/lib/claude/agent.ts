@@ -148,6 +148,8 @@ export async function* runAgent(
     // Path to Claude CLI - check env var first, then common locations
     // Must come AFTER spread to avoid being overwritten
     pathToClaudeCodeExecutable: claudePath,
+    // Enable stderr capture to see actual errors from claude
+    stderr: (data: string) => console.error("[Claude stderr]", data),
   };
 
   // Set OAuth token if provided (for Claude Code integration)
