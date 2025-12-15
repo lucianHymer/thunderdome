@@ -11,6 +11,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Thunderdome - AI Gladiator Arena",
   description: "Pit AI gladiators against your coding problems",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default async function RootLayout({

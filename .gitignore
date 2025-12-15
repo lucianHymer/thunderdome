@@ -36,6 +36,8 @@ coverage/
 
 # Misc
 .cache/
+.playwright-mcp/
+tsconfig.tsbuildinfo
 
 # Database
 *.db
