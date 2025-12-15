@@ -42,7 +42,8 @@ export function BattleView({ trial, gladiators, verdict }: BattleViewProps) {
   const stream = useTrialStream(trial.id);
 
   // Use streamed status if available, otherwise use initial status
-  const currentStatus = stream.status || trial.status;
+  // Extract status from the last event if available
+  const currentStatus = (stream.lastEvent as any)?.trial?.status || trial.status;
 
   return (
     <div className="space-y-6">
@@ -60,10 +61,10 @@ export function BattleView({ trial, gladiators, verdict }: BattleViewProps) {
       </Card>
 
       {/* Status Banner */}
-      <StatusBanner status={currentStatus} message={stream.latestEvent?.message} />
+      <StatusBanner status={currentStatus} message={(stream.lastEvent as any)?.message} />
 
       {/* Connection Status */}
-      {!stream.isConnected && stream.error && (
+      {!stream.connected && stream.error && (
         <div className="border border-red-500 bg-red-950/30 rounded-lg p-4 text-red-400">
           Connection Error: {stream.error}
         </div>
