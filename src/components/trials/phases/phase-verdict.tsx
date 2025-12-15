@@ -6,9 +6,11 @@
 
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Markdown } from "@/components/ui/markdown";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { PhaseState } from "@/hooks/use-trial-phases";
 import { ThinkingIndicator } from "../timeline-phase";
 import { cn } from "@/lib/utils";
@@ -88,6 +90,10 @@ export function PhaseVerdict({
     ? [...gladiators].sort((a, b) => (scores[b.id] || 0) - (scores[a.id] || 0))
     : gladiators;
 
+  // Extract judge perspectives from summary (format: "## Judge Perspectives\n\n**JudgeName**: ...")
+  const judgePerspectivesMatch = verdict.summary.match(/## Judge Perspectives\n\n([\s\S]*?)$/);
+  const judgePerspectives = judgePerspectivesMatch ? judgePerspectivesMatch[1].trim() : null;
+
   return (
     <div className="space-y-4">
       {/* Winner announcement */}
@@ -152,22 +158,42 @@ export function PhaseVerdict({
         </div>
       )}
 
-      {/* Summary */}
-      <div className="border border-green-500/20 rounded-lg bg-black/20 p-4">
+      {/* Summary - show only the first paragraph, not full judge perspectives */}
+      <div className="border border-green-500/20 rounded-lg bg-black/20 p-4 max-w-[700px] mx-auto">
         <h4 className="text-sm font-medium text-green-400 mb-3">Summary</h4>
-        <div className="text-sm">
-          <Markdown>{verdict.summary}</Markdown>
+        <div className="text-sm text-foreground">
+          {verdict.summary.split(/\n\n##/)[0].trim()}
         </div>
       </div>
 
+      {/* Judge Perspectives - collapsible */}
+      {judgePerspectives && (
+        <Collapsible>
+          <CollapsibleTrigger className="w-full flex items-center justify-between border border-purple-500/20 rounded-lg bg-black/20 p-4 hover:bg-purple-950/20 transition-colors group">
+            <h4 className="text-sm font-medium text-purple-400">Judge Perspectives</h4>
+            <ChevronDown className="h-4 w-4 text-purple-400 transition-transform group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="border border-t-0 border-purple-500/20 rounded-b-lg bg-black/20 px-4 pb-4 data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp overflow-hidden">
+            <div className="text-sm space-y-4 pt-2">
+              <Markdown>{judgePerspectives}</Markdown>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
       {/* Detailed reasoning */}
       {verdict.reasoning && (
-        <div className="border border-border rounded-lg bg-black/20 p-4">
-          <h4 className="text-sm font-medium text-muted-foreground mb-3">Detailed Reasoning</h4>
-          <div className="text-sm">
-            <Markdown>{verdict.reasoning}</Markdown>
-          </div>
-        </div>
+        <Collapsible>
+          <CollapsibleTrigger className="w-full flex items-center justify-between border border-border rounded-lg bg-black/20 p-4 hover:bg-muted/20 transition-colors group">
+            <h4 className="text-sm font-medium text-muted-foreground">Detailed Reasoning</h4>
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="border border-t-0 border-border rounded-b-lg bg-black/20 px-4 pb-4 data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp overflow-hidden">
+            <div className="text-sm pt-2">
+              <Markdown>{verdict.reasoning}</Markdown>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
     </div>
   );

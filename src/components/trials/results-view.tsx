@@ -145,10 +145,10 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="text-lg font-semibold">
-            <Markdown>{verdict.summary}</Markdown>
+          <div className="text-lg">
+            {verdict.summary.split(/\n\n##/)[0].trim()}
           </div>
-          <div className="text-muted-foreground">
+          <div className="text-muted-foreground text-sm">
             <Markdown>{verdict.reasoning}</Markdown>
           </div>
           {verdict.winnerGladiatorId && (

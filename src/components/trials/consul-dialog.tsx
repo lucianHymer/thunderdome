@@ -20,7 +20,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Verdict {
   summary: string;
@@ -235,7 +234,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
         </div>
 
         {/* Messages */}
-        <ScrollArea className="flex-1 min-h-[200px] max-h-[400px] pr-4" viewportRef={scrollRef}>
+        <div className="flex-1 min-h-[200px] max-h-[400px] overflow-y-auto pr-2" ref={scrollRef}>
           <div className="space-y-4">
             {messages.map((message, index) => (
               <div
@@ -270,7 +269,7 @@ export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDia
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Quick Actions */}
         {!isStreaming && messages.length > 0 && (
