@@ -88,7 +88,7 @@ export async function runLanista(
       {
         model: MODELS.OPUS, // Use Opus for the Lanista itself - needs strong reasoning
         allowedTools: [], // Lanista doesn't need tools, just reasoning
-        maxTurns: 1, // Single-turn structured output
+        maxTurns: 5, // Allow a few turns for structured output
         systemPrompt: LANISTA_SYSTEM_PROMPT,
         permissionMode: "bypassPermissions",
       },
