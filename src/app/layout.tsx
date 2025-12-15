@@ -23,7 +23,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={inter.className}>
-        <div className="min-h-screen bg-background">
+        <div className="min-h-screen bg-background text-foreground">
           <header className="border-b border-border">
             <div className="container mx-auto px-4 py-4">
               <div className="flex items-center justify-between">
