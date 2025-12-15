@@ -36,6 +36,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   // Set up SSE stream
   const encoder = new TextEncoder();
+  let isClosed = false;
+
+  const safeClose = (controller: ReadableStreamDefaultController) => {
+    if (!isClosed) {
+      isClosed = true;
+      try {
+        controller.close();
+      } catch (_e) {
+        // Already closed
+      }
+    }
+  };
+
+  const safeEnqueue = (controller: ReadableStreamDefaultController, data: Uint8Array) => {
+    if (!isClosed) {
+      try {
+        controller.enqueue(data);
+      } catch (_e) {
+        // Controller closed
+      }
+    }
+  };
+
   const stream = new ReadableStream({
     async start(controller) {
       // Send initial connection event
@@ -44,12 +67,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         content: "Connected to gladiator stream",
         timestamp: Date.now(),
       })}\n\n`;
-      controller.enqueue(encoder.encode(message));
+      safeEnqueue(controller, encoder.encode(message));
 
       let lastOutputLength = 0;
 
       // Poll for updates every 1 second
       const interval = setInterval(async () => {
+        if (isClosed) {
+          clearInterval(interval);
+          return;
+        }
+
         try {
           // Get current gladiator data
           const [currentGladiator] = await db
@@ -60,7 +88,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
           if (!currentGladiator) {
             clearInterval(interval);
-            controller.close();
+            safeClose(controller);
             return;
           }
 
@@ -74,7 +102,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             const newEvents = streamLog.slice(lastOutputLength);
             for (const event of newEvents) {
               const eventMessage = `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
-              controller.enqueue(encoder.encode(eventMessage));
+              safeEnqueue(controller, encoder.encode(eventMessage));
             }
             lastOutputLength = streamLog.length;
           }
@@ -85,7 +113,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             content: currentGladiator.status,
             timestamp: Date.now(),
           })}\n\n`;
-          controller.enqueue(encoder.encode(statusEvent));
+          safeEnqueue(controller, encoder.encode(statusEvent));
 
           // If gladiator is done, send complete event and close
           if (currentGladiator.status === "COMPLETED" || currentGladiator.status === "FAILED") {
@@ -94,9 +122,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               content: currentGladiator.responseContent || "",
               timestamp: Date.now(),
             })}\n\n`;
-            controller.enqueue(encoder.encode(completeEvent));
+            safeEnqueue(controller, encoder.encode(completeEvent));
             clearInterval(interval);
-            setTimeout(() => controller.close(), 1000);
+            setTimeout(() => safeClose(controller), 1000);
           }
         } catch (error) {
           const errorEvent = `event: error_event\ndata: ${JSON.stringify({
@@ -104,16 +132,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             content: error instanceof Error ? error.message : "Unknown error",
             timestamp: Date.now(),
           })}\n\n`;
-          controller.enqueue(encoder.encode(errorEvent));
+          safeEnqueue(controller, encoder.encode(errorEvent));
           clearInterval(interval);
-          controller.close();
+          safeClose(controller);
         }
       }, 1000);
 
       // Clean up on close
       request.signal.addEventListener("abort", () => {
         clearInterval(interval);
-        controller.close();
+        safeClose(controller);
       });
     },
   });
