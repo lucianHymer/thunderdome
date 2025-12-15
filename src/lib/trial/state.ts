@@ -49,7 +49,7 @@ const STATE_TRANSITIONS: Record<TrialPhase, TrialPhase[]> = {
   judging: ["judging", "decree", "failed"],
   decree: ["decree", "complete", "failed"],
   complete: [],
-  failed: ["lanista_designing", "battling", "arbiter_designing", "judging"],
+  failed: ["failed", "lanista_designing", "battling", "arbiter_designing", "judging"],
 };
 
 // For backwards compatibility
