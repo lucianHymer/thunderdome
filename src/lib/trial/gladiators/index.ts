@@ -13,7 +13,9 @@ import {
   type AgentResult,
   aggregateCosts,
   type CostInfo,
+  MODELS,
   runAgent,
+  runAgentSimple,
   type StreamEvent,
 } from "../../claude/index";
 import { broadcastGladiatorUpdate, broadcastTrialUpdate } from "../broadcast";
@@ -30,6 +32,42 @@ const DEFAULT_GLADIATOR_TIMEOUT_MS = 30 * 60 * 1000;
  * Maximum number of turns per gladiator
  */
 const DEFAULT_MAX_TURNS = 25;
+
+/**
+ * Generate a summary of gladiator output using Haiku
+ */
+async function generateSummary(
+  gladiatorName: string,
+  responseContent: string,
+  oauthToken: string,
+): Promise<string | null> {
+  try {
+    // Truncate very long responses to avoid excessive token usage
+    const truncatedContent =
+      responseContent.length > 10000
+        ? responseContent.slice(0, 10000) + "\n...[truncated]"
+        : responseContent;
+
+    const result = await runAgentSimple(
+      `Summarize what this AI agent "${gladiatorName}" accomplished in 1-2 sentences. Be specific about what was done, not how it was done. Focus on the outcome.
+
+Output to summarize:
+${truncatedContent}`,
+      {
+        model: MODELS.HAIKU,
+        allowedTools: [],
+        maxTurns: 1,
+        permissionMode: "bypassPermissions",
+      },
+      oauthToken,
+    );
+
+    return result.success ? result.content : null;
+  } catch (error) {
+    console.error("Failed to generate summary:", error);
+    return null;
+  }
+}
 
 /**
  * Gladiator database record
@@ -181,12 +219,19 @@ async function runSingleGladiator(
         : undefined,
     };
 
+    // Generate summary using Haiku (non-blocking, don't fail if it doesn't work)
+    let summary: string | null = null;
+    if (result.success && result.content) {
+      summary = await generateSummary(gladiator.name, result.content, oauthToken);
+    }
+
     // Store result in database
     await db
       .update(gladiatorsTable)
       .set({
         status: result.success ? "COMPLETED" : "FAILED",
         responseContent: result.content,
+        responseSummary: summary,
         streamLog: JSON.stringify(
           events.map((e) => ({
             type: e.type,

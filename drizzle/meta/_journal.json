@@ -8,6 +8,13 @@
       "when": 1765769879171,
       "tag": "0000_normal_turbo",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1765777655135,
+      "tag": "0001_dry_invaders",
+      "breakpoints": true
     }
   ]
 }

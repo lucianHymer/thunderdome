@@ -21,6 +21,7 @@ interface Gladiator {
   model: string;
   status: string;
   branchName?: string;
+  responseSummary?: string | null;
 }
 
 interface Judge {
@@ -160,8 +161,8 @@ export function BattleView({
     }
   };
 
-  // Show resume button for stuck trials
-  const canResume = currentStatus !== "COMPLETED" && currentStatus !== "PENDING";
+  // Show resume button only for failed trials
+  const canResume = currentStatus === "FAILED";
 
   return (
     <div className="space-y-6">

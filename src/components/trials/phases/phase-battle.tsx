@@ -20,6 +20,7 @@ interface Gladiator {
   model: string;
   status: string;
   branchName?: string;
+  responseSummary?: string | null;
 }
 
 interface PhaseBattleProps {

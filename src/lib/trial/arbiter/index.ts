@@ -127,32 +127,55 @@ export async function runArbiter(
       },
     });
 
-    // Create judge records in the database
-    const judgeRecords = arbiterOutput.judges.map((j) => ({
-      trialId,
-      name: j.name,
-      focus: j.focus,
-      model: MODELS.OPUS, // Use Opus for judges - they need strong evaluation capabilities
-      evaluation: JSON.stringify({
-        evaluationCriteria: j.evaluationCriteria,
-      }),
-    }));
-
-    // Insert all judges
-    const insertedJudges = await db.insert(judges).values(judgeRecords).returning();
-
-    // Notify that judges have been created
-    onStatus?.({
-      type: "judges_created",
-      data: {
-        trialId,
-        judges: insertedJudges.map((j) => ({
-          id: j.id,
-          name: j.name,
-          focus: j.focus,
-        })),
-      },
+    // Check if judges already exist for this trial (resume case)
+    const existingJudges = await db.query.judges.findMany({
+      where: eq(judges.trialId, trialId),
     });
+
+    let insertedJudges: typeof existingJudges;
+
+    if (existingJudges.length > 0) {
+      // Reuse existing judges on resume
+      insertedJudges = existingJudges;
+      onStatus?.({
+        type: "judges_reused",
+        data: {
+          trialId,
+          judges: existingJudges.map((j) => ({
+            id: j.id,
+            name: j.name,
+            focus: j.focus,
+          })),
+        },
+      });
+    } else {
+      // Create judge records in the database
+      const judgeRecords = arbiterOutput.judges.map((j) => ({
+        trialId,
+        name: j.name,
+        focus: j.focus,
+        model: MODELS.OPUS, // Use Opus for judges - they need strong evaluation capabilities
+        evaluation: JSON.stringify({
+          evaluationCriteria: j.evaluationCriteria,
+        }),
+      }));
+
+      // Insert all judges
+      insertedJudges = await db.insert(judges).values(judgeRecords).returning();
+
+      // Notify that judges have been created
+      onStatus?.({
+        type: "judges_created",
+        data: {
+          trialId,
+          judges: insertedJudges.map((j) => ({
+            id: j.id,
+            name: j.name,
+            focus: j.focus,
+          })),
+        },
+      });
+    }
 
     // Transition to judging state
     await transitionTrialState(trialId, "judging", {

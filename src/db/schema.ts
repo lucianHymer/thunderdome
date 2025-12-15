@@ -121,6 +121,7 @@ export const gladiators = sqliteTable("gladiators", {
     .notNull()
     .default("PENDING"),
   responseContent: text("response_content"), // Final output from the gladiator
+  responseSummary: text("response_summary"), // Haiku-generated summary for UI display
   streamLog: text("stream_log"), // JSON string: SSE event log
   createdAt: integer("created_at", { mode: "timestamp" })
     .$defaultFn(() => new Date())

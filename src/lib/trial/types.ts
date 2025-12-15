@@ -16,6 +16,7 @@ export type TrialEventType =
   | "arbiter_complete"
   | "arbiter_error"
   | "judges_created"
+  | "judges_reused"
   | "judging_started"
   // Judge events
   | "judge_thinking"
@@ -24,6 +25,7 @@ export type TrialEventType =
   | "all_judges_complete"
   // Verdict events
   | "verdict_synthesizing"
+  | "verdict_exists"
   | "verdict_complete";
 
 /**

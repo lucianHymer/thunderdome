@@ -143,6 +143,31 @@ async function synthesizeVerdict(
   onStatus?: StatusCallback,
 ): Promise<void> {
   try {
+    // Check if verdict already exists (resume case)
+    const existingVerdict = await db.query.verdicts.findFirst({
+      where: eq(verdicts.trialId, trialId),
+    });
+
+    if (existingVerdict) {
+      onStatus?.({
+        type: "verdict_exists",
+        data: {
+          trialId,
+          message: "Verdict already exists, skipping synthesis",
+        },
+      });
+
+      // Still transition to decree phase
+      const winnerGladiator = gladiatorRecords.find(
+        (g) => g.id === existingVerdict.winnerGladiatorId,
+      );
+      await transitionTrialState(trialId, "decree", {
+        winnerId: existingVerdict.winnerGladiatorId,
+        winnerName: winnerGladiator?.name || "Unknown",
+      });
+      return;
+    }
+
     onStatus?.({
       type: "verdict_synthesizing",
       data: {

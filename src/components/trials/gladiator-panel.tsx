@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useGladiatorStream, type GladiatorStreamEvent } from "@/hooks/use-gladiator-stream";
@@ -20,6 +20,7 @@ interface GladiatorPanelProps {
     name: string;
     persona: string;
     status: string;
+    responseSummary?: string | null;
   };
   isWinner?: boolean;
 }
@@ -80,6 +81,7 @@ function parseEventsToSegments(events: GladiatorStreamEvent[]): OutputSegment[] 
 export function GladiatorPanel({ gladiator, isWinner }: GladiatorPanelProps) {
   const stream = useGladiatorStream(gladiator.id);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // Parse events into segments
   const segments = useMemo(() => {
@@ -131,47 +133,77 @@ export function GladiatorPanel({ gladiator, isWinner }: GladiatorPanelProps) {
       <p className="text-sm text-muted-foreground mb-3 italic">"{gladiator.persona}"</p>
 
       {/* Output area */}
-      <ScrollArea className="flex-1 border border-border rounded-lg bg-black/20 min-h-[300px]">
-        <div ref={scrollRef} className="p-4 space-y-3">
-          {segments.length === 0 ? (
-            <span className="text-muted-foreground">
-              {gladiator.status === "PENDING"
-                ? "Waiting for gladiator to begin..."
-                : gladiator.status === "RUNNING"
-                ? "Starting up..."
-                : "No output recorded."}
-            </span>
-          ) : (
-            segments.map((segment, index) => {
-              if (segment.type === "text") {
-                return (
-                  <div
-                    key={`text-${index}`}
-                    className="text-sm font-mono whitespace-pre-wrap text-foreground/90"
-                  >
-                    {segment.content}
-                  </div>
-                );
-              }
-              return (
-                <ToolUseCard
-                  key={`tool-${index}`}
-                  toolName={segment.toolName || "Tool"}
-                  input={segment.toolInput}
-                  output={segment.toolOutput}
-                />
-              );
-            })
-          )}
+      <div className="flex-1 border border-border rounded-lg bg-black/20 min-h-[300px] flex flex-col">
+        {/* Summary view (collapsed) */}
+        {gladiator.status === "COMPLETED" && gladiator.responseSummary && !isExpanded ? (
+          <div className="p-4 flex flex-col h-full">
+            <p className="text-sm text-foreground/90 mb-4">{gladiator.responseSummary}</p>
+            <button
+              type="button"
+              onClick={() => setIsExpanded(true)}
+              className="mt-auto text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <span>▼</span>
+              <span>Show full output ({segments.length} events)</span>
+            </button>
+          </div>
+        ) : (
+          /* Full output view (expanded or no summary) */
+          <ScrollArea className="flex-1">
+            <div ref={scrollRef} className="p-4 space-y-3">
+              {/* Collapse button when expanded */}
+              {isExpanded && gladiator.responseSummary && (
+                <button
+                  type="button"
+                  onClick={() => setIsExpanded(false)}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 mb-2"
+                >
+                  <span>▲</span>
+                  <span>Show summary</span>
+                </button>
+              )}
 
-          {/* Error display */}
-          {stream.error && (
-            <div className="mt-4 p-3 rounded-lg bg-red-950/30 border border-red-500/30 text-red-400 text-sm">
-              Error: {stream.error}
+              {segments.length === 0 ? (
+                <span className="text-muted-foreground">
+                  {gladiator.status === "PENDING"
+                    ? "Waiting for gladiator to begin..."
+                    : gladiator.status === "RUNNING"
+                    ? "Starting up..."
+                    : "No output recorded."}
+                </span>
+              ) : (
+                segments.map((segment, index) => {
+                  if (segment.type === "text") {
+                    return (
+                      <div
+                        key={`text-${index}`}
+                        className="text-sm font-mono whitespace-pre-wrap text-foreground/90"
+                      >
+                        {segment.content}
+                      </div>
+                    );
+                  }
+                  return (
+                    <ToolUseCard
+                      key={`tool-${index}`}
+                      toolName={segment.toolName || "Tool"}
+                      input={segment.toolInput}
+                      output={segment.toolOutput}
+                    />
+                  );
+                })
+              )}
+
+              {/* Error display */}
+              {stream.error && (
+                <div className="mt-4 p-3 rounded-lg bg-red-950/30 border border-red-500/30 text-red-400 text-sm">
+                  Error: {stream.error}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </ScrollArea>
+          </ScrollArea>
+        )}
+      </div>
 
       {/* Completion indicator */}
       {stream.isComplete && (
