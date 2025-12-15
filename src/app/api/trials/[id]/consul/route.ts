@@ -125,19 +125,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           for await (const event of agentStream) {
             console.log("[Consul] Event type:", event.type);
 
-            // runAgent yields "thinking" events containing raw stream data
-            if (event.type === "thinking") {
-              const streamEvent = event.content as any;
-              console.log("[Consul] Stream event type:", streamEvent?.type);
-
-              // Handle content block delta for streaming text
-              if (
-                streamEvent.type === "content_block_delta" &&
-                streamEvent.delta?.type === "text_delta"
-              ) {
-                const text = streamEvent.delta.text;
+            // Handle assistant messages - this is where the text content is
+            if (event.type === "assistant") {
+              const text = event.content as string;
+              if (text) {
                 fullResponse += text;
-
                 const data = JSON.stringify({
                   type: "content",
                   text,
