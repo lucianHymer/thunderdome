@@ -80,7 +80,7 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
 
     judges.forEach((judge) => {
       const parsed = parseEvaluation(judge.evaluation);
-      if (parsed) {
+      if (parsed?.evaluations) {
         const evalData = parsed.evaluations.find((e) => e.gladiatorId === gladiatorId);
         if (evalData) {
           scores.push(evalData.score);
@@ -249,7 +249,7 @@ export function ResultsView({ trialId, verdict, gladiators, judges }: ResultsVie
                               <strong>Summary:</strong> {parsed.summary}
                             </div>
                           )}
-                          {parsed.evaluations.map((evalData) => {
+                          {parsed.evaluations?.map((evalData) => {
                             const gladiator = gladiators.find((g) => g.id === evalData.gladiatorId);
                             return (
                               <div key={evalData.gladiatorId} className="border-t pt-3">

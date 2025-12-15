@@ -53,7 +53,7 @@ export function TrialTimeline({
 }: TrialTimelineProps) {
   // Combine phase judge designs with actual judge records
   const judgesWithEvaluations = judges.map((judge) => {
-    const phaseJudge = phases.judging.judges.find((j) => j.judgeId === judge.id);
+    const phaseJudge = phases.judging.judges?.find((j) => j.judgeId === judge.id);
     let evaluation = null;
     if (judge.evaluation) {
       try {
