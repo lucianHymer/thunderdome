@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -46,9 +46,43 @@ interface BattleViewProps {
   verdict?: Verdict | null;
 }
 
-export function BattleView({ trial, gladiators, verdict }: BattleViewProps) {
-  const stream = useTrialStream(trial.id);
+export function BattleView({ trial: initialTrial, gladiators: initialGladiators, verdict }: BattleViewProps) {
+  const stream = useTrialStream(initialTrial.id);
   const [showDebug, setShowDebug] = useState(false);
+  const [trial, setTrial] = useState(initialTrial);
+  const [gladiators, setGladiators] = useState(initialGladiators);
+  const [lastFetchedEventCount, setLastFetchedEventCount] = useState(0);
+
+  // Refetch trial data from server
+  const refetchTrial = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/trials/${initialTrial.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.trial) {
+          // API returns gladiators nested in trial
+          const { gladiators: newGladiators, ...trialData } = data.trial;
+          setTrial(trialData);
+          if (newGladiators) setGladiators(newGladiators);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to refetch trial:", e);
+    }
+  }, [initialTrial.id]);
+
+  // Refetch when important events occur
+  useEffect(() => {
+    const importantEvents = ['lanista_complete', 'gladiators_created', 'state_change', 'verdict_complete'];
+    const hasNewImportantEvent = stream.events.slice(lastFetchedEventCount).some(
+      (e: any) => importantEvents.includes(e.type)
+    );
+
+    if (hasNewImportantEvent) {
+      refetchTrial();
+      setLastFetchedEventCount(stream.events.length);
+    }
+  }, [stream.events, lastFetchedEventCount, refetchTrial]);
 
   // Use streamed status if available, otherwise use initial status
   const currentStatus = (stream.lastEvent as any)?.trial?.status || trial.status;
