@@ -140,6 +140,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 controller.enqueue(encoder.encode(`data: ${data}\n\n`));
               }
             } else if (event.type === "result") {
+              const resultMsg = event.content as any;
+              console.log("[Consul] Result keys:", Object.keys(resultMsg || {}));
+              console.log("[Consul] Result.result:", resultMsg?.result);
               // Store the conversation in the decrees table
               await db.insert(decrees).values({
                 trialId,
