@@ -15,22 +15,33 @@ import { broadcastTrialUpdate } from "./broadcast";
 // Trial status enum matching the database schema
 export type TrialStatus = "PENDING" | "PLANNING" | "RUNNING" | "JUDGING" | "COMPLETED" | "FAILED";
 
+// Trial phase enum - matches the database schema phase column
+export type TrialPhase =
+  | "pending"
+  | "lanista_designing"
+  | "battling"
+  | "arbiter_designing"
+  | "judging"
+  | "decree"
+  | "complete"
+  | "failed";
+
 // Map the state machine states to database statuses
-export const STATE_MAPPING = {
-  pending: "PENDING" as const,
-  lanista_designing: "PLANNING" as const,
-  battling: "RUNNING" as const,
-  arbiter_designing: "JUDGING" as const,
-  judging: "JUDGING" as const,
-  decree: "COMPLETED" as const,
-  complete: "COMPLETED" as const,
-  failed: "FAILED" as const,
+export const STATE_MAPPING: Record<TrialPhase, TrialStatus> = {
+  pending: "PENDING",
+  lanista_designing: "PLANNING",
+  battling: "RUNNING",
+  arbiter_designing: "JUDGING",
+  judging: "JUDGING",
+  decree: "COMPLETED",
+  complete: "COMPLETED",
+  failed: "FAILED",
 };
 
 // Valid state transitions
 // Note: Each state can transition to itself (no-op for resume scenarios)
 // Failed state can recover to any earlier state for resume functionality
-const STATE_TRANSITIONS: Record<string, string[]> = {
+const STATE_TRANSITIONS: Record<TrialPhase, TrialPhase[]> = {
   pending: ["pending", "lanista_designing", "failed"],
   lanista_designing: ["lanista_designing", "battling", "failed"],
   battling: ["battling", "arbiter_designing", "failed"],
@@ -41,7 +52,8 @@ const STATE_TRANSITIONS: Record<string, string[]> = {
   failed: ["lanista_designing", "battling", "arbiter_designing", "judging"],
 };
 
-export type TrialState = keyof typeof STATE_TRANSITIONS;
+// For backwards compatibility
+export type TrialState = TrialPhase;
 
 /**
  * Check if a state transition is valid
@@ -74,17 +86,22 @@ export async function transitionTrialState(
     throw new Error(`Trial ${trialId} not found`);
   }
 
-  // Map current status to state (reverse lookup)
-  let currentState: TrialState | undefined;
-  for (const [state, status] of Object.entries(STATE_MAPPING)) {
-    if (status === trial.status) {
-      currentState = state as TrialState;
-      break;
+  // Use the phase column directly for current state (with fallback for legacy data)
+  let currentState: TrialState;
+  if (trial.phase) {
+    currentState = trial.phase as TrialState;
+  } else {
+    // Fallback for legacy data without phase column - use status reverse lookup
+    // This will be removed once all data is migrated
+    for (const [state, status] of Object.entries(STATE_MAPPING)) {
+      if (status === trial.status) {
+        currentState = state as TrialState;
+        break;
+      }
     }
-  }
-
-  if (!currentState) {
-    throw new Error(`Unknown current status: ${trial.status}`);
+    if (!currentState!) {
+      throw new Error(`Unknown current status: ${trial.status}`);
+    }
   }
 
   // Validate transition
@@ -100,9 +117,10 @@ export async function transitionTrialState(
   // Get the database status for the next state
   const nextStatus = getStatusForState(nextState);
 
-  // Update the database
-  const updateData: any = {
+  // Update both status (for display) and phase (for state machine)
+  const updateData: { status: TrialStatus; phase: TrialPhase; completedAt?: Date } = {
     status: nextStatus,
+    phase: nextState,
   };
 
   // Mark as completed if we reach the complete state

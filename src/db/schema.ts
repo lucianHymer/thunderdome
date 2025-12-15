@@ -80,6 +80,19 @@ export const trials = sqliteTable("trials", {
   })
     .notNull()
     .default("PENDING"),
+  // Internal state machine phase - more granular than status for proper state transitions
+  phase: text("phase", {
+    enum: [
+      "pending",
+      "lanista_designing",
+      "battling",
+      "arbiter_designing",
+      "judging",
+      "decree",
+      "complete",
+      "failed",
+    ],
+  }).default("pending"),
   lanistaPlan: text("lanista_plan"), // JSON string: Lanista's setup/planning output
   arbiterPlan: text("arbiter_plan"), // JSON string: Arbiter's judging criteria
   createdAt: integer("created_at", { mode: "timestamp" })
