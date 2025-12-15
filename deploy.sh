@@ -23,7 +23,7 @@ echo "📦 Preserving native modules..."
 ssh $SERVER "[ -d $REMOTE_DIR/node_modules/better-sqlite3 ] && mv $REMOTE_DIR/node_modules/better-sqlite3 /tmp/better-sqlite3-cache || true"
 
 echo "📤 Uploading..."
-rsync -avz --delete "$STANDALONE_ROOT/" $SERVER:$REMOTE_DIR/
+rsync -avz --delete --exclude='thunderdome.db' "$STANDALONE_ROOT/" $SERVER:$REMOTE_DIR/
 
 # Restore cached native modules
 ssh $SERVER "[ -d /tmp/better-sqlite3-cache ] && rm -rf $REMOTE_DIR/node_modules/better-sqlite3 && mv /tmp/better-sqlite3-cache $REMOTE_DIR/node_modules/better-sqlite3 || true"
