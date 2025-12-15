@@ -62,7 +62,19 @@ export function NewTrialForm() {
         throw new Error(data.error || "Failed to create trial");
       }
 
-      router.push(`/trials/${data.trial.id}`);
+      const trialId = data.trial.id;
+
+      // Auto-start the trial
+      const startResponse = await fetch(`/api/trials/${trialId}/start`, {
+        method: "POST",
+      });
+
+      if (!startResponse.ok) {
+        const startData = await startResponse.json();
+        throw new Error(startData.error || "Failed to start trial");
+      }
+
+      router.push(`/trials/${trialId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create trial");
       setIsSubmitting(false);

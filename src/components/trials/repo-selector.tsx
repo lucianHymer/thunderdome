@@ -112,6 +112,7 @@ export function RepoSelector({ onSelect, selectedRepo }: RepoSelectorProps) {
             const isSelected = selectedRepo?.id === repo.id;
             return (
               <button
+                type="button"
                 key={repo.id}
                 onClick={() => onSelect(repo)}
                 className={`w-full text-left p-3 rounded-lg border transition-colors ${

@@ -379,3 +379,298 @@ Also needed to install @types/tar-stream for TypeScript support of archive opera
 **Files**: next.config.ts, package.json
 ---
 
+### [03:33] [architecture] Trial System Architecture - Complete Flow
+**Details**: ## Core Concepts
+
+**Trial**: A complete problem-solving session where AI gladiators compete to solve a challenge, judged by AI judges, with human editor approval.
+
+### Trial Lifecycle (State Machine)
+pending → lanista_designing → battling → arbiter_designing → judging → decree → complete
+
+Key states mapped to database statuses:
+- PENDING: Trial created, awaiting start
+- PLANNING: Lanista is designing gladiators
+- RUNNING: Gladiators are executing/battling
+- JUDGING: Judges are evaluating
+- COMPLETED: Verdict reached
+- FAILED: Error occurred
+
+### Database Schema
+
+**trials table**: Stores trial metadata
+- id, userId, repoUrl, challengePrompt, trialType (GLADIATOR|LEGION), status
+- lanistaPlan, arbiterPlan (JSON storage for reasoning and designs)
+- createdAt, completedAt
+
+**gladiators table**: AI agents competing in the trial
+- id, trialId, name, persona, model, temperature, tools (JSON array)
+- branchName (for code battles), status, responseContent, streamLog
+
+**judges table**: AI evaluators of gladiator outputs
+- id, trialId, name, focus, model, evaluation (JSON)
+
+**verdicts table**: Final judgment
+- id, trialId, summary, winnerGladiatorId, reasoning
+
+**decrees table**: Actions taken after verdict
+- id, trialId, actionType (MERGE|CLOSE_PR|CREATE_ISSUE|COMMENT), actionDetails
+
+### Trial Types
+
+**GLADIATOR Mode (Ideation)**
+- Multiple AI agents compete with different, even opposing perspectives
+- Each gladiator gets distinct persona, temperature, tools
+- Creates "productive tension" through diversity
+- Currently enabled and working
+
+**LEGION Mode (Implementation)**
+- AI agents work together as coordinated team
+- Complementary roles with specialization
+- Currently disabled ("Coming soon!" in UI)
+- Not yet implemented
+
+### What "Ideation" Means
+Refers to the GLADIATOR mode's primary use case: exploring solution space through diverse AI perspectives rather than collaborative implementation. "Ideation" emphasizes creative, competitive problem-solving where different approaches illuminate the solution space through their differences.
+**Files**: src/db/schema.ts, src/lib/trial/state.ts, src/lib/trial/types.ts, src/app/api/trials/route.ts, thunderdome-spec.md
+---
+
+### [03:33] [architecture] GLADIATOR Mode - The Lanista System
+**Details**: ## GLADIATOR Mode Execution Flow
+
+### 1. Trial Creation
+POST /api/trials with:
+- challengePrompt: The problem to solve
+- trialType: "GLADIATOR" (currently the only enabled option)
+- repoUrl: Optional, only for code battles (currently not working - code battle mode incomplete)
+
+Trial starts in PENDING status.
+
+### 2. Trial Start (POST /api/trials/{id}/start)
+If trial has repoUrl:
+- Checks that setup discovery completed (repo setup cached in repoSetups table)
+- Attempts to start code battle (currently throws "not fully implemented" error)
+- Code battle would use containers, git worktrees, and push changes
+
+If no repoUrl (pure ideation mode - currently working):
+- Transitions to lanista_designing (PLANNING status)
+- Placeholder for future: "Kick off Lanista agent in background"
+
+### 3. Lanista Phase (runLanista)
+The Lanista is an Claude Opus agent that:
+
+**Input**: 
+- challengePrompt
+- trialType ("GLADIATOR" generates competitive guidance)
+- optional repoContext (from setup discovery)
+
+**Process**:
+1. Invokes Claude Opus with structured output schema (LanistaOutputSchema)
+2. Lanista analyzes the challenge
+3. Lanista invents 2-6 gladiators with:
+   - name: Descriptive name
+   - persona: Detailed system prompt defining approach
+   - model: "opus"|"sonnet"|"haiku"
+   - temperature: 0.0-1.0 (flexibility/creativity)
+   - tools: Array of available tool names
+   - focus: What this gladiator prioritizes
+
+**Gladiator Archetypes Available** (Lanista can use or create custom):
+- The Paranoid: Security/edge cases, temp 0.3-0.5
+- The Minimalist: Simplicity, temp 0.4-0.6
+- The Pragmatist: Fast shipping, temp 0.5-0.7
+- The Academic: Correctness/theory, temp 0.3-0.5
+- The Contrarian: Challenge assumptions, temp 0.7-0.9
+- The User Advocate: UX/usability, temp 0.5-0.7
+- The Performance Engineer: Speed/efficiency, temp 0.4-0.6
+- The Test Engineer: Testing/quality, temp 0.4-0.6
+
+**Output Storage**:
+- Creates gladiator records in database with generated personas
+- Stores lanistaPlan JSON in trial (reasoning, gladiators, cost)
+- Status transitions: PLANNING → RUNNING
+
+### 4. Gladiator Execution (runGladiators)
+Each gladiator runs in parallel with timeout (default 30 min):
+
+**System Prompt**:
+- Gladiator's unique persona (from Lanista)
+- Challenge description
+- Competition mode note: "You are competing against other AI agents with different approaches"
+- Focus area for that gladiator
+- For code battles: repository context + working directory
+
+**User Prompt**:
+Simple: "Begin your work on the challenge described in your mission"
+
+**Execution**:
+- Claude agent with up to 25 turns max
+- Streams all events (thinking, tool calls, results) to SSE
+- Events stored in database streamLog (JSON)
+- Final response stored in responseContent
+
+**Repo URL Usage in Code Battles** (Not currently working):
+If repoUrl exists and setup completed:
+- Container started from Docker image
+- Repo cloned into container
+- Setup script runs
+- Gladiator gets worktree for isolated branch
+- Can use Bash, Read, Write, Edit, Glob, Grep tools
+- Creates commits on trial-specific branch
+- Branch pushed to repo after battle complete
+
+For pure ideation (no repo):
+- No container needed
+- Gladiators just think and respond
+- Can use thinking, tools like WebSearch, WebFetch, but not filesystem tools
+
+### 5. Arbiter Phase (runArbiter)
+After all gladiators complete:
+
+**Input**: Challenge + all gladiator outputs (successful only)
+
+**Process**:
+1. Transition to arbiter_designing (JUDGING status)
+2. Invoke Claude Opus with ArbiterOutputSchema
+3. Arbiter analyzes:
+   - What each gladiator produced
+   - Dimensions that matter for fair evaluation
+   - Creates 3-5 judges with evaluation criteria
+
+**Judges Created**:
+- Each gets a name, focus area, evaluation criteria
+- Stored in judges table
+- Status transitions to judging
+
+### 6. Judge Phase (runJudges)
+All judges run in parallel:
+
+**Input Per Judge**:
+- Challenge description
+- All gladiator outputs (successful ones)
+- Judge's specific focus area
+- Evaluation criteria from Arbiter
+
+**Output**:
+- Structured evaluation from each judge
+- Scores/assessment per gladiator
+- Reasoning for each assessment
+
+### 7. Verdict & Decree Phases
+**Verdict Synthesis**:
+- Combines all judge evaluations
+- Creates verdict record with summary, reasoning
+- May select winnerGladiatorId
+- Status transitions: judging → decree → complete
+
+**Decree**:
+- Post-trial action (MERGE, CLOSE_PR, CREATE_ISSUE, COMMENT)
+- Consul helper for interactive decisions
+- Can combine approaches, synthesize code, export results
+
+## Broadcast & SSE
+- SSE stream at /api/trials/{id}/stream
+- Real-time events: lanista_thinking, gladiator_started, judge_thinking, verdict_complete, etc.
+- Each phase broadcasts updates to connected clients
+- Frontend shows live progress during trial
+**Files**: src/lib/trial/lanista/index.ts, src/lib/trial/gladiators/index.ts, src/lib/trial/arbiter/index.ts, src/lib/trial/judges/index.ts, src/lib/trial/gladiators/prompts.ts, src/app/api/trials/[id]/start/route.ts
+---
+
+### [03:33] [architecture] Repo URL Usage in Trials (Code Battles)
+**Details**: ## How Repo URL is Used
+
+### Where repoUrl is stored
+- trials table, repoUrl field (text, not nullable for code battles)
+- Provided when creating trial, optional
+- Can be GitHub HTTPS URL like: https://github.com/owner/repo
+
+### Setup Discovery (Pre-Trial)
+Before code battles can run, repo needs setup information:
+
+**runSetupDiscovery** function:
+- Takes repoUrl + workingDir (local clone)
+- Uses Claude Sonnet agent with Read/Glob/Grep/Bash
+- Explores repo to understand: dependencies, build steps, test commands
+- Generates and caches:
+  - setupMd: Documentation of how to build/test
+  - setupSh: Shell script to set up environment
+
+**Stored in repoSetups table**:
+- userId, repoUrl (unique), setupMd, setupSh, createdAt, updatedAt
+- Cached per user per repo to avoid re-discovering
+
+### Trial Start Check
+When POST /api/trials/{id}/start with repoUrl:
+1. Verifies repoSetups entry exists
+2. If missing: returns error "Repo setup required. Run Setup Discovery first"
+3. If exists: attempts to start code battle
+
+### Code Battle Execution (Not fully implemented)
+If repo URL present, would:
+1. Start Docker container (startTrialContainer)
+2. Clone repo into container
+3. Run setup commands from setupSh
+4. Create git worktrees for each gladiator
+5. Each gladiator gets isolated branch in working container
+6. Gladiators can modify code in their worktree
+7. After battle: push all branches to origin with `git push origin --all --force-with-lease`
+8. Results visible as PRs/branches in repo
+
+### Current Status
+- Code battle mode NOT FULLY IMPLEMENTED
+- runCodeBattle throws error: "Code battle mode is not fully implemented"
+- Pure ideation mode (no repoUrl) IS WORKING
+- repoUrl field exists but not used for active trials yet
+- Setup discovery infrastructure in place but frontend/e2e not complete
+
+### Why Repo URL Matters
+- **With URL**: Gladiators can work on real code, make commits, run tests
+- **Without URL**: Pure ideation - gladiators think through problems, no file modifications
+- **Setup Required**: System needs to know how to build/test the specific repo before attempting code battles
+**Files**: src/app/api/trials/[id]/start/route.ts, src/lib/setup/discovery.ts, src/lib/trial/code-battle/orchestrator.ts, src/lib/git/worktree.ts, src/db/schema.ts
+---
+
+### [03:47] [architecture] Trial Status Display System with SSE Real-Time Updates
+**Details**: Trial progress is displayed to users through a comprehensive real-time streaming system using Server-Sent Events (SSE). The system has multiple layers:
+
+1. **Status States**: Trials transition through 6 main states:
+   - PENDING (initial) -> PLANNING (lanista designing) -> RUNNING (battle) -> JUDGING (arbiter judging) -> COMPLETED (decree) -> COMPLETED
+   - Can fail at any point -> FAILED
+   
+2. **SSE Broadcasting Architecture**:
+   - Central broadcast system in `/src/lib/trial/broadcast.ts` manages in-memory subscriptions
+   - Maintains maps: Map<trialId, Map<subscriberId, Subscriber>> for trial updates
+   - Maintains maps: Map<gladiatorId, Map<subscriberId, Subscriber>> for gladiator updates
+   - Uses ReadableStream controllers to push SSE events to all connected clients
+   - Handles dead subscriber cleanup automatically
+
+3. **Trial-level Updates** (/api/trials/[id]/stream):
+   - Endpoint sends initial state immediately (trial data + status)
+   - Uses subscribeToTrial() to create subscription stream
+   - Broadcasts state_change events via transitionTrialState() in state.ts
+   - Events include type, state, status, timestamp, and metadata
+
+4. **Gladiator-level Updates** (/api/gladiators/[id]/stream):
+   - Uses 1-second polling to check database for updates
+   - Reads streamLog (JSON) from gladiators table for event history
+   - Sends individual event types: text, tool_use, status, complete, error
+   - Closes stream when gladiator status is COMPLETED or FAILED
+   - Manages timer-based polling with proper cleanup on connection close
+
+5. **Event Types** (from types.ts):
+   - Lanista events: lanista_thinking, lanista_complete, lanista_error, gladiators_created
+   - Arbiter events: arbiter_thinking, arbiter_complete, arbiter_error, judges_created, judging_started
+   - Judge events: judge_thinking, judge_complete, judge_error, all_judges_complete
+   - Verdict events: verdict_synthesizing, verdict_complete
+
+6. **Client-Side Hooks**:
+   - useTrialStream(trialId): Connects to /api/trials/[id]/stream, manages SSE connection, includes auto-reconnect (10 attempts, 2s delay), accumulates events in state
+   - useGladiatorStream(gladiatorId): Connects to /api/gladiators/[id]/stream, parses typed events, accumulates output, tracks streaming/complete status
+
+7. **UI Components**:
+   - BattleView: Main component showing challenge, status banner, verdict, and gladiator tabs
+   - StatusBanner: Displays current status with emoji and color coding (PENDING:gray, PLANNING:yellow, RUNNING:orange, JUDGING:purple, COMPLETED:green, FAILED:red), pulse animation for active states
+   - GladiatorPanel: Shows streaming output in scrollable area, status dots, auto-scroll to bottom, winner badge if applicable
+   - ResultsView: Final results including verdict, gladiator responses with scores, judge evaluations with strengths/weaknesses, export and consult options
+**Files**: /workspace/project/src/lib/trial/broadcast.ts, /workspace/project/src/lib/trial/state.ts, /workspace/project/src/hooks/use-trial-stream.ts, /workspace/project/src/hooks/use-gladiator-stream.ts, /workspace/project/src/components/trials/battle-view.tsx, /workspace/project/src/components/trials/status-banner.tsx, /workspace/project/src/components/trials/gladiator-panel.tsx, /workspace/project/src/app/api/trials/[id]/stream/route.ts, /workspace/project/src/app/api/gladiators/[id]/stream/route.ts
+---
+

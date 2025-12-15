@@ -11,7 +11,9 @@ import { repoSetups, trials, users } from "@/db/schema";
 import { decrypt } from "@/lib/encryption";
 import { requireUser } from "@/lib/session";
 import { runCodeBattle } from "@/lib/trial/code-battle/orchestrator";
-import { transitionTrialState } from "@/lib/trial/state";
+import { runLanista } from "@/lib/trial/lanista";
+import { runGladiators } from "@/lib/trial/gladiators";
+import { broadcastTrialUpdate } from "@/lib/trial/broadcast";
 
 /**
  * POST - Start a trial
@@ -81,14 +83,38 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       });
     }
 
-    // Transition to lanista_designing state
-    await transitionTrialState(trialId, "lanista_designing", {
-      message: "Trial started - Lanista is designing the battle plan",
+    // Get user's Claude token
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.id, user.id),
     });
 
-    // TODO (Issue 5): Kick off Lanista agent in the background
-    // This is just a placeholder for now
-    // Future: startLanistaAgent(trialId, trial.repoUrl, trial.challengePrompt);
+    if (!dbUser?.claudeToken) {
+      return NextResponse.json(
+        { error: "Claude token required. Configure in settings." },
+        { status: 400 },
+      );
+    }
+
+    const claudeToken = decrypt(dbUser.claudeToken);
+
+    // Run Lanista and gladiators in background
+    (async () => {
+      try {
+        // Run Lanista to design gladiators
+        await runLanista(trialId, claudeToken, (event) => {
+          broadcastTrialUpdate(trialId, event);
+        });
+
+        // Run gladiators in parallel
+        await runGladiators(trialId, claudeToken);
+      } catch (error) {
+        console.error("Trial execution failed:", error);
+        broadcastTrialUpdate(trialId, {
+          type: "error",
+          data: { error: error instanceof Error ? error.message : "Unknown error" },
+        });
+      }
+    })();
 
     return NextResponse.json({
       success: true,
