@@ -11,7 +11,7 @@ npm run build
 
 # Copy static assets into standalone (required by Next.js)
 cp -r .next/static .next/standalone/.next/
-cp -r public .next/standalone/
+[ -d public ] && cp -r public .next/standalone/ || true
 
 echo "📤 Uploading..."
 tar czf - -C .next/standalone . | ssh $SERVER "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR && cd $REMOTE_DIR && tar xzf -"
