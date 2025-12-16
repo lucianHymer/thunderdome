@@ -16,7 +16,6 @@ import { Textarea } from "@/components/ui/textarea";
 interface SetupDiscoveryProps {
   owner: string;
   repo: string;
-  workingDir: string;
   onComplete?: (files: { setupMd: string; setupSh: string }) => void;
   onCancel?: () => void;
 }
@@ -31,7 +30,6 @@ type DiscoveryStatus = "idle" | "running" | "complete" | "error";
 export function SetupDiscovery({
   owner,
   repo,
-  workingDir,
   onComplete,
   onCancel,
 }: SetupDiscoveryProps) {
@@ -52,11 +50,11 @@ export function SetupDiscovery({
     setCost(null);
 
     try {
-      // Use POST endpoint with streaming
+      // Use POST endpoint with streaming - API auto-clones the repo
       const response = await fetch(`/api/repos/${owner}/${repo}/setup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workingDir }),
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {
@@ -158,13 +156,13 @@ export function SetupDiscovery({
         <div className="border border-border rounded-lg p-6">
           <h3 className="text-lg font-semibold mb-2">Setup Discovery</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Claude will explore the repository at{" "}
-            <code className="font-mono bg-muted px-1 py-0.5 rounded">{workingDir}</code> and create
-            setup documentation and automation scripts.
+            Claude will explore{" "}
+            <code className="font-mono bg-muted px-1 py-0.5 rounded">{owner}/{repo}</code>{" "}
+            and create setup documentation and automation scripts.
           </p>
           <p className="text-sm text-muted-foreground mb-4">This process will:</p>
           <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1 mb-6">
-            <li>Analyze the repository structure</li>
+            <li>Clone and analyze the repository</li>
             <li>Identify build and test commands</li>
             <li>Create SETUP.md documentation</li>
             <li>Generate setup.sh automation script</li>

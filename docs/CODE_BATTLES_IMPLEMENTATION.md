@@ -32,6 +32,14 @@ Code Battles allow AI gladiators to compete by making real changes to a user's r
 - [ ] Orchestrator wiring (currently throws error immediately)
 - [ ] Container image with Claude CLI installed
 
+### Recently Completed
+- [x] **Setup Discovery Integration in Trial Creation Flow**
+  - Frontend checks if setup exists when repo is selected
+  - Shows status badges: "Checking...", "Setup ready", "Setup needed"
+  - Prompts user to run setup discovery if missing
+  - Setup discovery auto-clones repo (no local path needed)
+  - Saves setup to DB, then trial can proceed
+
 ---
 
 ## Phase 1: GitHub App Integration ✅ COMPLETE
@@ -344,6 +352,9 @@ async function runCodeBattle(
 | `src/app/api/github/app/*` | ✅ Done | Installation endpoints (install, callback, repos, installations) |
 | `src/lib/git/worktree.ts` | ✅ Done | Fixed worktree creation, added cloneRepo, token-in-URL auth |
 | `README.md` | ✅ Done | GitHub App setup instructions |
+| `src/app/api/repos/[owner]/[repo]/setup/route.ts` | ✅ Done | Auto-clones repo for setup discovery (no local path needed) |
+| `src/components/setup/setup-discovery.tsx` | ✅ Done | Simplified - no workingDir prop needed |
+| `src/components/trials/new-trial-form.tsx` | ✅ Done | Checks setup status, shows discovery UI when needed |
 | `src/lib/docker/container.ts` | 🔲 TODO | Add credential injection (env vars for Claude API key) |
 | `src/lib/trial/code-battle/orchestrator.ts` | 🔲 TODO | Remove blockers, wire up flow |
 | `src/lib/trial/code-battle/gladiators.ts` | 🔲 TODO | Real Claude execution |

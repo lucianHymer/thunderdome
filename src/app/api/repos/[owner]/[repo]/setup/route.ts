@@ -5,14 +5,22 @@
  * POST /api/repos/:owner/:repo/setup - Run setup discovery (streaming)
  */
 
+import { exec } from "child_process";
+import { mkdir, rm } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import { promisify } from "util";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { repoSetups, users } from "@/db/schema";
 import type { StreamEvent } from "@/lib/claude/types";
 import { decrypt } from "@/lib/encryption";
+import { getRepoToken } from "@/lib/github/app";
 import { requireUser } from "@/lib/session";
 import { runSetupDiscovery } from "@/lib/setup/discovery";
+
+const execAsync = promisify(exec);
 
 /**
  * GET - Check if setup exists for a repository
@@ -56,8 +64,7 @@ export async function GET(
  *
  * Request body:
  * {
- *   workingDir: string; // Path to cloned repository
- *   force?: boolean;    // Force re-discovery even if setup exists
+ *   force?: boolean;  // Force re-discovery even if setup exists
  * }
  *
  * Returns: Server-Sent Events stream with discovery progress
@@ -66,10 +73,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ owner: string; repo: string }> },
 ) {
+  let tempDir: string | null = null;
+
   try {
     const user = await requireUser();
     const { owner, repo } = await params;
     const repoUrl = `https://github.com/${owner}/${repo}`;
+    const repoFullName = `${owner}/${repo}`;
 
     // Get user's Claude token
     const [dbUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
@@ -83,12 +93,8 @@ export async function POST(
 
     const claudeToken = decrypt(dbUser.claudeToken);
 
-    const body = await request.json();
-    const { workingDir, force = false } = body;
-
-    if (!workingDir || typeof workingDir !== "string") {
-      return NextResponse.json({ error: "workingDir is required" }, { status: 400 });
-    }
+    const body = await request.json().catch(() => ({}));
+    const { force = false } = body;
 
     // Check if setup already exists (unless force is true)
     if (!force) {
@@ -103,6 +109,44 @@ export async function POST(
         );
       }
     }
+
+    // Get GitHub token for cloning
+    const tokenResult = await getRepoToken(repoFullName, user.id);
+    if (!tokenResult) {
+      return NextResponse.json(
+        { error: "No GitHub App installation has access to this repository. Please install the Thunderdome app on this repo." },
+        { status: 403 },
+      );
+    }
+
+    // Create temp directory and clone repo
+    tempDir = join(tmpdir(), `thunderdome-setup-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
+
+    const cloneUrl = `https://x-access-token:${tokenResult.token}@github.com/${repoFullName}.git`;
+    const workingDir = join(tempDir, repo);
+
+    try {
+      await execAsync(`git clone --depth 1 "${cloneUrl}" "${workingDir}"`, {
+        timeout: 60000, // 60 second timeout for clone
+      });
+    } catch (cloneError) {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      return NextResponse.json(
+        { error: `Failed to clone repository: ${cloneError instanceof Error ? cloneError.message : "Unknown error"}` },
+        { status: 500 },
+      );
+    }
+
+    // Capture tempDir in closure for cleanup
+    const tempDirToCleanup = tempDir;
+
+    // Helper to clean up temp directory
+    const cleanup = async () => {
+      if (tempDirToCleanup) {
+        await rm(tempDirToCleanup, { recursive: true, force: true }).catch(() => {});
+      }
+    };
 
     // Create SSE stream
     const encoder = new TextEncoder();
@@ -147,6 +191,7 @@ export async function POST(
                 })}\n\n`,
               ),
             );
+            await cleanup();
             controller.close();
             return;
           }
@@ -189,6 +234,7 @@ export async function POST(
             ),
           );
 
+          await cleanup();
           controller.close();
         } catch (error) {
           controller.enqueue(
@@ -201,6 +247,7 @@ export async function POST(
               })}\n\n`,
             ),
           );
+          await cleanup();
           controller.close();
         }
       },
