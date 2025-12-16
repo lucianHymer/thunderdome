@@ -11,6 +11,7 @@ import { decrees, gladiators, judges, trials, users, verdicts } from "@/db/schem
 import { runAgent } from "@/lib/claude/agent";
 import { decrypt } from "@/lib/encryption";
 import { requireUser } from "@/lib/session";
+import { createWordStreamResponse, streamTextToSSE } from "@/lib/streaming";
 import {
   buildConsulContext,
   buildConsulGreeting,
@@ -89,10 +90,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const claudeToken = decrypt(dbUser.claudeToken);
 
-    // If this is initialization, return greeting
+    // If this is initialization, return greeting with word-by-word streaming
     if (message === "__INIT__") {
       const greeting = buildConsulGreeting(context);
-      return createStreamResponse(greeting);
+      const stream = createWordStreamResponse(greeting, 25);
+      return new NextResponse(stream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
     }
 
     // Build conversation context for the prompt
@@ -123,7 +131,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           );
 
           for await (const event of agentStream) {
-            // Handle assistant messages - extract text from the message object
+            // Handle assistant messages - extract text and re-chunk for smooth display
             if (event.type === "assistant") {
               const msg = event.content as any;
               // The content is a message object with content array
@@ -131,11 +139,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               const text = textContent?.text;
               if (text) {
                 fullResponse += text;
-                const data = JSON.stringify({
-                  type: "content",
-                  text,
-                });
-                controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                // Re-chunk text word-by-word for smooth streaming display
+                await streamTextToSSE(controller, encoder, text, 15);
               }
             } else if (event.type === "result") {
               // Store the conversation in the decrees table
@@ -187,42 +192,3 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-/**
- * Helper to create a simple streaming response for pre-generated text
- */
-function createStreamResponse(text: string): NextResponse {
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    start(controller) {
-      // Stream word-by-word for a natural typing effect
-      // Split preserving whitespace as separate tokens
-      const tokens = text.split(/(\s+)/);
-      let index = 0;
-      const interval = setInterval(() => {
-        if (index < tokens.length) {
-          const token = tokens[index];
-          if (token) {
-            const data = JSON.stringify({
-              type: "content",
-              text: token,
-            });
-            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-          }
-          index++;
-        } else {
-          clearInterval(interval);
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-        }
-      }, 30); // 30ms per word for smooth streaming
-    },
-  });
-
-  return new NextResponse(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  });
-}

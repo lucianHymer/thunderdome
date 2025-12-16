@@ -2,12 +2,13 @@
  * Scrollable Container Component
  *
  * A container that auto-scrolls to bottom when content changes.
- * Works correctly in both flexbox and fixed-height contexts.
+ * Uses "detached" state tracking - once user scrolls up, auto-scroll
+ * is disabled until they scroll back to the bottom.
  */
 
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 interface ScrollableContainerProps {
@@ -18,8 +19,8 @@ interface ScrollableContainerProps {
   className?: string;
   /** Whether to auto-scroll on content changes (default: true) */
   autoScroll?: boolean;
-  /** Pixel threshold for smart scroll - only scrolls if within this distance of bottom (default: 100) */
-  smartScrollThreshold?: number;
+  /** Pixel threshold for re-attaching when user scrolls back to bottom (default: 50) */
+  reattachThreshold?: number;
 }
 
 export function ScrollableContainer({
@@ -27,20 +28,50 @@ export function ScrollableContainer({
   scrollTrigger,
   className,
   autoScroll = true,
-  smartScrollThreshold = 100,
+  reattachThreshold = 50,
 }: ScrollableContainerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isDetachedRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
 
-  // Smart scroll - only auto-scroll if user is near bottom
-  useEffect(() => {
-    if (autoScroll && scrollRef.current) {
-      const el = scrollRef.current;
-      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < smartScrollThreshold;
-      if (isNearBottom) {
-        el.scrollTop = el.scrollHeight;
-      }
+  // Handle user scroll - detect if they scrolled up (detach) or back to bottom (reattach)
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const currentScrollTop = el.scrollTop;
+    const distanceFromBottom = el.scrollHeight - currentScrollTop - el.clientHeight;
+
+    // User scrolled UP - detach from auto-scroll
+    if (currentScrollTop < lastScrollTopRef.current && distanceFromBottom > reattachThreshold) {
+      isDetachedRef.current = true;
     }
-  }, [scrollTrigger, autoScroll, smartScrollThreshold]);
+
+    // User scrolled back to bottom - reattach
+    if (distanceFromBottom <= reattachThreshold) {
+      isDetachedRef.current = false;
+    }
+
+    lastScrollTopRef.current = currentScrollTop;
+  }, [reattachThreshold]);
+
+  // Set up scroll listener
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, [handleScroll]);
+
+  // Auto-scroll to bottom when content changes (if not detached)
+  useEffect(() => {
+    if (autoScroll && scrollRef.current && !isDetachedRef.current) {
+      const el = scrollRef.current;
+      el.scrollTop = el.scrollHeight;
+      lastScrollTopRef.current = el.scrollTop;
+    }
+  }, [scrollTrigger, autoScroll]);
 
   return (
     <div
