@@ -18,6 +18,8 @@ interface ScrollableContainerProps {
   className?: string;
   /** Whether to auto-scroll on content changes (default: true) */
   autoScroll?: boolean;
+  /** Pixel threshold for smart scroll - only scrolls if within this distance of bottom (default: 100) */
+  smartScrollThreshold?: number;
 }
 
 export function ScrollableContainer({
@@ -25,15 +27,20 @@ export function ScrollableContainer({
   scrollTrigger,
   className,
   autoScroll = true,
+  smartScrollThreshold = 100,
 }: ScrollableContainerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when scrollTrigger changes
+  // Smart scroll - only auto-scroll if user is near bottom
   useEffect(() => {
     if (autoScroll && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      const el = scrollRef.current;
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < smartScrollThreshold;
+      if (isNearBottom) {
+        el.scrollTop = el.scrollHeight;
+      }
     }
-  }, [scrollTrigger, autoScroll]);
+  }, [scrollTrigger, autoScroll, smartScrollThreshold]);
 
   return (
     <div

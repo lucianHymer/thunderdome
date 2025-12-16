@@ -194,23 +194,27 @@ function createStreamResponse(text: string): NextResponse {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
-      // Stream the text character by character for a typing effect
+      // Stream word-by-word for a natural typing effect
+      // Split preserving whitespace as separate tokens
+      const tokens = text.split(/(\s+)/);
       let index = 0;
       const interval = setInterval(() => {
-        if (index < text.length) {
-          const char = text[index];
-          const data = JSON.stringify({
-            type: "content",
-            text: char,
-          });
-          controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+        if (index < tokens.length) {
+          const token = tokens[index];
+          if (token) {
+            const data = JSON.stringify({
+              type: "content",
+              text: token,
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          }
           index++;
         } else {
           clearInterval(interval);
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
         }
-      }, 10); // 10ms per character for smooth typing effect
+      }, 30); // 30ms per word for smooth streaming
     },
   });
 
