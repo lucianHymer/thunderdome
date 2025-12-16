@@ -52,9 +52,15 @@ Required environment variables in `.env`:
 # Database
 DATABASE_URL=./thunderdome.db
 
-# GitHub OAuth (create app at github.com/settings/developers)
+# GitHub OAuth (for user login - create at github.com/settings/developers)
 GITHUB_CLIENT_ID=your_github_client_id
 GITHUB_CLIENT_SECRET=your_github_client_secret
+
+# GitHub App (for Code Battles - repo write access)
+# Create at github.com/settings/apps/new (see setup below)
+GITHUB_APP_ID=your_app_id
+GITHUB_APP_PRIVATE_KEY=base64_encoded_private_key
+GITHUB_APP_WEBHOOK_SECRET=optional_webhook_secret
 
 # NextAuth.js
 NEXTAUTH_SECRET=your_random_secret_string
@@ -67,15 +73,36 @@ ENCRYPTION_KEY=your_encryption_key_64_chars
 
 ### Getting Credentials
 
-1. **GitHub OAuth:** Create an OAuth App at https://github.com/settings/developers
+1. **GitHub OAuth App** (for user login):
+   Create at https://github.com/settings/developers
    - Homepage URL: `http://localhost:3000`
    - Callback URL: `http://localhost:3000/api/auth/callback/github`
 
-2. **NextAuth Secret:** Generate with `openssl rand -base64 32`
+2. **GitHub App** (for Code Battles - scoped repo access):
+   Create at https://github.com/settings/apps/new
+   - **App Name:** Thunderdome Code Battles (or your preferred name)
+   - **Homepage URL:** `http://localhost:3000`
+   - **Callback URL:** `http://localhost:3000/api/github/app/callback`
+   - **Setup URL:** `http://localhost:3000/api/github/app/callback` (optional)
+   - **Webhook:** Disable unless you want push notifications
+   - **Permissions:**
+     - Repository permissions:
+       - **Contents:** Read & Write (required for git push)
+       - **Metadata:** Read (required)
+       - **Pull requests:** Read & Write (optional, for auto-PR creation)
+   - After creation:
+     - Copy the **App ID** to `GITHUB_APP_ID`
+     - Generate a **Private Key** and base64 encode it:
+       ```bash
+       cat your-app-name.private-key.pem | base64 -w0
+       ```
+     - Paste the encoded key to `GITHUB_APP_PRIVATE_KEY`
 
-3. **Encryption Key:** Generate with `openssl rand -hex 32`
+3. **NextAuth Secret:** Generate with `openssl rand -base64 32`
 
-4. **Claude API Token:** Each user provides their own token in Settings after login
+4. **Encryption Key:** Generate with `openssl rand -hex 32`
+
+5. **Claude API Token:** Each user provides their own token in Settings after login
 
 ## Development Commands
 
@@ -252,17 +279,43 @@ GET /api/trials/:id/export
 ### GitHub API
 
 ```typescript
-// List user repositories
+// List user repositories (via OAuth)
 GET /api/github/repos
 
 // Analyze repository setup
 GET /api/repos/:owner/:repo/setup
 ```
 
+### GitHub App API (for Code Battles)
+
+```typescript
+// Redirect to install GitHub App
+GET /api/github/app/install
+
+// Handle installation callback (automatic)
+GET /api/github/app/callback?installation_id=...
+
+// List repos accessible via GitHub App
+GET /api/github/app/repos
+
+// Sync repos from GitHub (refresh cache)
+POST /api/github/app/repos
+
+// List user's GitHub App installations
+GET /api/github/app/installations
+
+// Remove an installation from tracking
+DELETE /api/github/app/installations/:installationId
+```
+
 ## Security
 
 - User Claude API tokens encrypted at rest using `ENCRYPTION_KEY`
-- GitHub OAuth with restricted scopes
+- GitHub OAuth for login only (read-only user info)
+- GitHub App for repo access with user-selected repository scoping
+  - Short-lived tokens (1 hour expiry)
+  - Per-installation revocation
+  - No access to repos user hasn't explicitly granted
 - Docker containers isolated per gladiator
 - No shared state between battles
 - Rate limiting on API endpoints

@@ -198,3 +198,40 @@ export const repoSetups = sqliteTable("repo_setups", {
     .$defaultFn(() => new Date())
     .notNull(),
 });
+
+// GitHub App Installations - tracks which users have installed the GitHub App
+export const githubAppInstallations = sqliteTable("github_app_installations", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  installationId: integer("installation_id").notNull().unique(),
+  accountLogin: text("account_login").notNull(), // GitHub username or org name
+  accountType: text("account_type", { enum: ["User", "Organization"] }).notNull(),
+  repositorySelection: text("repository_selection", { enum: ["all", "selected"] }),
+  suspendedAt: integer("suspended_at", { mode: "timestamp" }), // null if active
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
+});
+
+// GitHub App Repos - caches which repos are accessible via which installation
+export const githubAppRepos = sqliteTable("github_app_repos", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  installationId: integer("installation_id")
+    .notNull()
+    .references(() => githubAppInstallations.installationId, { onDelete: "cascade" }),
+  repoFullName: text("repo_full_name").notNull(), // 'owner/repo'
+  repoId: integer("repo_id").notNull(),
+  private: integer("private", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
+});
