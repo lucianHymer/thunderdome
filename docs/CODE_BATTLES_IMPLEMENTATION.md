@@ -36,95 +36,77 @@ Code Battles allow AI gladiators to compete by making real changes to a user's r
 
 ## Phase 1: GitHub App Integration ✅ COMPLETE
 
-### Why GitHub App Instead of OAuth?
+### Single GitHub App for Everything
 
-| OAuth App | GitHub App |
-|-----------|------------|
-| User grants access to ALL repos | User selects specific repos |
-| Token has all user permissions | Scoped to installation permissions |
-| Long-lived tokens | Short-lived installation tokens (1hr) |
-| Can't revoke per-repo | Revocable per-installation |
-| Less audit trail | Webhook events, audit log |
+We use ONE GitHub App for both user login (OAuth) and repo access (installations).
+No separate OAuth App needed.
+
+| Old Approach (2 apps) | New Approach (1 app) |
+|----------------------|----------------------|
+| OAuth App for login | GitHub App OAuth for login |
+| GitHub App for repos | Same app for repo access |
+| 2 sets of credentials | 3 credentials total |
 
 ### 1.1 Create GitHub App
 
 **Settings to configure:**
 
 ```
-Name: Thunderdome Code Battles
+Name: Thunderdome
 Homepage URL: https://your-domain.com
-Callback URL: https://your-domain.com/api/github/app/callback
-Setup URL: https://your-domain.com/api/github/app/setup (optional)
-Webhook URL: https://your-domain.com/api/github/webhooks (optional)
+Callback URL: https://your-domain.com/api/auth/callback/github  (for OAuth login)
+Setup URL: https://your-domain.com/api/github/app/callback      (post-install redirect)
+Webhook: Disabled (unless you want push notifications)
 ```
 
 **Permissions needed:**
 - Repository permissions:
   - Contents: Read & Write (for git push)
   - Metadata: Read (required)
-  - Pull requests: Read & Write (optional, for auto-PR creation)
-- Account permissions:
-  - None required
 
-**Events to subscribe (optional):**
-- Installation
-- Push (to detect external changes)
+**User authorization:**
+- Enable "Request user authorization (OAuth) during installation"
 
 ### 1.2 Environment Variables
 
 ```env
-# GitHub App (for code battles - repo write access)
-GITHUB_APP_ID=
-GITHUB_APP_PRIVATE_KEY=  # Base64 encoded .pem file
-GITHUB_APP_CLIENT_ID=
-GITHUB_APP_CLIENT_SECRET=
-GITHUB_APP_WEBHOOK_SECRET=  # Optional
+# Single GitHub App handles both login AND repo access
+GITHUB_APP_CLIENT_ID=Iv1.xxxx      # Client ID (used for OAuth + JWT)
+GITHUB_APP_CLIENT_SECRET=xxxx      # Client secret (for OAuth login)
+GITHUB_APP_PRIVATE_KEY=base64...   # Private key (for installation tokens)
 ```
 
-### 1.3 Database Schema Changes
+Note: GitHub recommends using Client ID (not App ID) for JWT generation.
+See: https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app
 
-```sql
--- Track GitHub App installations per user
-CREATE TABLE github_app_installations (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES users(id),
-  installation_id INTEGER NOT NULL,
-  account_login TEXT NOT NULL,      -- GitHub username or org
-  account_type TEXT NOT NULL,       -- 'User' or 'Organization'
-  repository_selection TEXT,         -- 'all' or 'selected'
-  created_at INTEGER DEFAULT (unixepoch()),
-  updated_at INTEGER DEFAULT (unixepoch())
-);
+### 1.3 Database Schema
 
--- Cache which repos are accessible via which installation
-CREATE TABLE github_app_repos (
-  id TEXT PRIMARY KEY,
-  installation_id INTEGER NOT NULL,
-  repo_full_name TEXT NOT NULL,     -- 'owner/repo'
-  repo_id INTEGER NOT NULL,
-  permissions TEXT,                  -- JSON of granted permissions
-  created_at INTEGER DEFAULT (unixepoch())
-);
-```
+**Implemented in:** `src/db/schema.ts`
+
+- `github_app_installations` - Tracks user's app installations
+- `github_app_repos` - Caches repos accessible per installation
 
 ### 1.4 API Endpoints
 
-```
-POST /api/github/app/callback     - Handle OAuth callback for app installation
-GET  /api/github/app/install      - Redirect to GitHub App installation
-GET  /api/github/app/repos        - List repos accessible via installations
-POST /api/github/app/token        - Generate installation access token
-DELETE /api/github/app/installation/:id - Revoke installation
-```
+**Implemented in:** `src/app/api/github/app/*`
 
-### 1.5 Installation Flow
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/github/app/install` | GET | Redirect to GitHub App installation |
+| `/api/github/app/callback` | GET | Handle post-installation redirect |
+| `/api/github/app/repos` | GET | List repos accessible via installations |
+| `/api/github/app/repos` | POST | Sync/refresh repos from GitHub |
+| `/api/github/app/installations` | GET | List user's installations |
+| `/api/github/app/installations/:id` | DELETE | Remove installation tracking |
 
-1. User clicks "Connect Repository" for code battle
-2. If no installation → redirect to GitHub App install page
-3. User selects repos to grant access
-4. GitHub redirects back with `installation_id`
-5. We store installation, fetch accessible repos
-6. User can now select from those repos for trials
+### 1.5 User Onboarding Flow
+
+1. User clicks "Sign in with GitHub" → OAuth via GitHub App
+2. User is logged in (no repo access yet)
+3. User creates code battle → prompted to "Install Thunderdome"
+4. User selects repos to grant access
+5. GitHub redirects back → installation saved, repos synced
+6. User can now run code battles on those repos
 
 ---
 
