@@ -12,19 +12,21 @@ import { eq, and } from "drizzle-orm";
 
 // Environment validation
 function getAppConfig() {
-  const appId = process.env.GITHUB_APP_ID;
+  // GitHub recommends using Client ID for JWT generation (not App ID)
+  // https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app
+  const clientId = process.env.GITHUB_APP_CLIENT_ID;
   const privateKeyBase64 = process.env.GITHUB_APP_PRIVATE_KEY;
 
-  if (!appId || !privateKeyBase64) {
+  if (!clientId || !privateKeyBase64) {
     throw new Error(
-      "GitHub App not configured. Set GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY environment variables."
+      "GitHub App not configured. Set GITHUB_APP_CLIENT_ID and GITHUB_APP_PRIVATE_KEY environment variables."
     );
   }
 
   // Decode base64 private key
   const privateKey = Buffer.from(privateKeyBase64, "base64").toString("utf-8");
 
-  return { appId, privateKey };
+  return { appId: clientId, privateKey };
 }
 
 // Singleton GitHub App instance

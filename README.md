@@ -52,15 +52,10 @@ Required environment variables in `.env`:
 # Database
 DATABASE_URL=./thunderdome.db
 
-# GitHub OAuth (for user login - create at github.com/settings/developers)
-GITHUB_CLIENT_ID=your_github_client_id
-GITHUB_CLIENT_SECRET=your_github_client_secret
-
-# GitHub App (for Code Battles - repo write access)
-# Create at github.com/settings/apps/new (see setup below)
-GITHUB_APP_ID=your_app_id
-GITHUB_APP_PRIVATE_KEY=base64_encoded_private_key
-GITHUB_APP_WEBHOOK_SECRET=optional_webhook_secret
+# GitHub App (handles both login AND repo access)
+GITHUB_APP_CLIENT_ID=Iv1.xxxx           # Client ID from GitHub App
+GITHUB_APP_CLIENT_SECRET=xxxx           # Client secret from GitHub App
+GITHUB_APP_PRIVATE_KEY=base64...        # Base64 encoded .pem file
 
 # NextAuth.js
 NEXTAUTH_SECRET=your_random_secret_string
@@ -73,36 +68,31 @@ ENCRYPTION_KEY=your_encryption_key_64_chars
 
 ### Getting Credentials
 
-1. **GitHub OAuth App** (for user login):
-   Create at https://github.com/settings/developers
-   - Homepage URL: `http://localhost:3000`
-   - Callback URL: `http://localhost:3000/api/auth/callback/github`
-
-2. **GitHub App** (for Code Battles - scoped repo access):
+1. **GitHub App** (handles both login AND repo access):
    Create at https://github.com/settings/apps/new
-   - **App Name:** Thunderdome Code Battles (or your preferred name)
+   - **App Name:** Thunderdome (or your preferred name)
    - **Homepage URL:** `http://localhost:3000`
-   - **Callback URL:** `http://localhost:3000/api/github/app/callback`
-   - **Setup URL:** `http://localhost:3000/api/github/app/callback` (optional)
+   - **Callback URL:** `http://localhost:3000/api/auth/callback/github`
+   - **Setup URL:** `http://localhost:3000/api/github/app/callback` (for post-install redirect)
    - **Webhook:** Disable unless you want push notifications
    - **Permissions:**
-     - Repository permissions:
-       - **Contents:** Read & Write (required for git push)
-       - **Metadata:** Read (required)
-       - **Pull requests:** Read & Write (optional, for auto-PR creation)
-   - After creation:
-     - Copy the **App ID** to `GITHUB_APP_ID`
-     - Generate a **Private Key** and base64 encode it:
+     - Repository: **Contents** (Read & Write), **Metadata** (Read)
+   - **User authorization:**
+     - Enable "Request user authorization (OAuth) during installation"
+   - After creation, you need 3 values:
+     - **Client ID** (starts with `Iv1.` or `Iv23.`) → `GITHUB_APP_CLIENT_ID`
+     - **Client Secret** (generate one) → `GITHUB_APP_CLIENT_SECRET`
+     - **Private Key** (generate .pem, then base64 encode):
        ```bash
-       cat your-app-name.private-key.pem | base64 -w0
+       cat your-app.private-key.pem | base64 -w0
        ```
-     - Paste the encoded key to `GITHUB_APP_PRIVATE_KEY`
+       → `GITHUB_APP_PRIVATE_KEY`
 
-3. **NextAuth Secret:** Generate with `openssl rand -base64 32`
+2. **NextAuth Secret:** Generate with `openssl rand -base64 32`
 
-4. **Encryption Key:** Generate with `openssl rand -hex 32`
+3. **Encryption Key:** Generate with `openssl rand -hex 32`
 
-5. **Claude API Token:** Each user provides their own token in Settings after login
+4. **Claude API Token:** Each user provides their own token in Settings after login
 
 ## Development Commands
 

@@ -20,12 +20,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   }),
   providers: [
     GitHub({
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+      // Using GitHub App for both login and repo access (installed separately)
+      clientId: process.env.GITHUB_APP_CLIENT_ID!,
+      clientSecret: process.env.GITHUB_APP_CLIENT_SECRET!,
       authorization: {
         params: {
-          // Request permissions to read user info and access repos
-          scope: "read:user repo",
+          // Only need user info - repo access comes from App installation
+          scope: "read:user user:email",
         },
       },
     }),
