@@ -8,13 +8,11 @@ import { runAgent } from "@/lib/claude/agent";
 import type { StreamEvent } from "@/lib/claude/types";
 import { SETUP_DISCOVERY_PROMPT, SETUP_DISCOVERY_SYSTEM_PROMPT } from "./prompts";
 
-// Models - copied from claude/index.ts to avoid import issues
+// Model aliases - SDK handles resolution
 const MODELS = {
-  OPUS: "claude-opus-4",
-  SONNET: "claude-sonnet-4",
-  HAIKU: "claude-haiku-4",
-  OPUS_35: "claude-opus-3-5-20241022",
-  SONNET_35: "claude-sonnet-3-5-20241022",
+  OPUS: "opus",
+  SONNET: "sonnet",
+  HAIKU: "haiku",
 } as const;
 
 /**
@@ -92,7 +90,7 @@ export async function runSetupDiscovery(
     const agentGen = runAgent(
       userPrompt,
       {
-        model: MODELS.SONNET, // Use Sonnet for good balance of capability and cost
+        model: MODELS.OPUS, // Use Opus for thorough repo analysis
         allowedTools: ["Read", "Glob", "Grep", "Bash"], // Tools needed for exploration
         maxTurns: 25, // Give it enough turns to thoroughly explore
         systemPrompt: SETUP_DISCOVERY_SYSTEM_PROMPT,
