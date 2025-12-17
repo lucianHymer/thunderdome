@@ -1,17 +1,21 @@
 /**
  * Setup Discovery Component
  *
- * Runs setup discovery with streaming output, allows editing files before approval
+ * Interactive setup discovery using Claude to explore a repository
+ * and create setup documentation and scripts.
  */
 
 "use client";
 
-import { useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { InteractiveSession, type QuickAction } from "@/components/ui/interactive-session";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { ScrollableContainer } from "@/components/ui/scrollable-container";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useInteractiveSession, type SessionMessage } from "@/hooks/use-interactive-session";
+import { SETUP_DISCOVERY_SYSTEM_PROMPT } from "@/lib/setup/prompts";
 
 interface SetupDiscoveryProps {
   owner: string;
@@ -20,12 +24,24 @@ interface SetupDiscoveryProps {
   onCancel?: () => void;
 }
 
-interface StreamMessage {
-  type: "start" | "stream" | "complete" | "error";
-  data: any;
-}
+type Phase = "idle" | "discovering" | "review" | "error";
 
-type DiscoveryStatus = "idle" | "running" | "complete" | "error";
+/**
+ * Parse setup.md and setup.sh from Claude's response
+ */
+function parseSetupFiles(text: string): { setupMd: string; setupSh: string } | null {
+  const setupMdMatch = text.match(/```setup\.md\s*\n([\s\S]*?)\n```/i);
+  const setupShMatch = text.match(/```setup\.sh\s*\n([\s\S]*?)\n```/i);
+
+  if (!setupMdMatch || !setupShMatch) {
+    return null;
+  }
+
+  return {
+    setupMd: setupMdMatch[1].trim(),
+    setupSh: setupShMatch[1].trim(),
+  };
+}
 
 export function SetupDiscovery({
   owner,
@@ -33,155 +49,90 @@ export function SetupDiscovery({
   onComplete,
   onCancel,
 }: SetupDiscoveryProps) {
-  const [status, setStatus] = useState<DiscoveryStatus>("idle");
-  const [streamLog, setStreamLog] = useState<string[]>([]);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [initialGuidance, setInitialGuidance] = useState("");
   const [setupMd, setSetupMd] = useState("");
   const [setupSh, setSetupSh] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [actionInfo, setActionInfo] = useState<{ label: string; url: string } | null>(null);
-  const [cost, setCost] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [userGuidance, setUserGuidance] = useState("");
-  const [pendingMessages, setPendingMessages] = useState<string[]>([]);
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [actionInfo, setActionInfo] = useState<{ label: string; url: string } | null>(null);
 
-  const startDiscovery = async (additionalGuidance?: string) => {
-    setStatus("running");
-    setStreamLog([]);
-    setError(null);
+  const session = useInteractiveSession({
+    apiEndpoint: "/api/agent/session",
+    systemPrompt: SETUP_DISCOVERY_SYSTEM_PROMPT,
+    model: "opus",
+    allowedTools: ["Read", "Glob", "Grep", "Bash"],
+    permissionMode: "bypassPermissions",
+  });
+
+  // Watch for completion and parse results
+  useEffect(() => {
+    if (session.result && session.status === "complete") {
+      // Try to parse setup files from the result
+      const lastAssistantMessage = session.messages
+        .filter((m) => m.role === "assistant")
+        .pop();
+
+      if (lastAssistantMessage) {
+        const files = parseSetupFiles(lastAssistantMessage.content);
+        if (files) {
+          setSetupMd(files.setupMd);
+          setSetupSh(files.setupSh);
+          setPhase("review");
+        } else {
+          setSetupError("Could not parse setup files from response. The agent may not have finished properly.");
+          setPhase("error");
+        }
+      }
+    }
+  }, [session.result, session.status, session.messages]);
+
+  // Watch for errors
+  useEffect(() => {
+    if (session.error) {
+      setSetupError(session.error);
+      setPhase("error");
+    }
+  }, [session.error]);
+
+  const startDiscovery = async () => {
+    setPhase("discovering");
+    setSetupError(null);
     setActionInfo(null);
-    setSetupMd("");
-    setSetupSh("");
-    setCost(null);
 
-    // Combine any initial guidance with additional guidance
-    const allGuidance = [userGuidance, additionalGuidance, ...pendingMessages]
-      .filter(Boolean)
-      .join("\n");
+    const repoUrl = `https://github.com/${owner}/${repo}`;
 
-    if (allGuidance) {
-      addLog(`📝 User guidance: ${allGuidance}`);
+    let prompt = `Explore this repository and create setup documentation.
+
+# REPOSITORY
+
+URL: ${repoUrl}
+Repository: ${owner}/${repo}
+
+# YOUR TASK
+
+1. Explore the repository thoroughly
+2. Figure out how to build and test it
+3. Create comprehensive SETUP.md documentation
+4. Create an automated setup.sh script
+
+As you explore, if you're uncertain about anything important (e.g., which test command to use, what environment setup is needed, ambiguous configuration), feel free to ask me for clarification rather than guessing.
+
+When you're confident you understand the setup, output both files in the exact format specified in your system prompt:
+
+\`\`\`setup.md
+[content]
+\`\`\`
+
+\`\`\`setup.sh
+[content]
+\`\`\``;
+
+    if (initialGuidance.trim()) {
+      prompt += `\n\n# GUIDANCE FROM USER\n${initialGuidance.trim()}`;
     }
 
-    try {
-      // Use POST endpoint with streaming - API auto-clones the repo
-      const response = await fetch(`/api/repos/${owner}/${repo}/setup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guidance: allGuidance || undefined }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        // Check if there's an actionable error (GitHub App not installed/repo not connected)
-        if (data.actionUrl) {
-          setStatus("error");
-          setError(data.message || data.error);
-          // Store action info for the error UI
-          setActionInfo({ label: data.action, url: data.actionUrl });
-          return;
-        }
-        throw new Error(data.error || "Failed to start setup discovery");
-      }
-
-      // Read SSE stream
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (!reader) {
-        throw new Error("No response body");
-      }
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            try {
-              const message: StreamMessage = JSON.parse(data);
-              handleStreamMessage(message);
-            } catch (_e) {}
-          }
-        }
-      }
-    } catch (err) {
-      setStatus("error");
-      setError(err instanceof Error ? err.message : "Unknown error");
-      addLog(`ERROR: ${err instanceof Error ? err.message : "Unknown error"}`);
-    }
-  };
-
-  const handleStreamMessage = (message: StreamMessage) => {
-    switch (message.type) {
-      case "start":
-        addLog(`Starting discovery for ${message.data.repoUrl}...`);
-        break;
-
-      case "stream": {
-        // Handle different stream event types
-        const event = message.data;
-        if (event.type === "assistant") {
-          // Extract text from assistant message content array
-          const content = event.content?.content;
-          if (Array.isArray(content)) {
-            for (const block of content) {
-              if (block.type === "text" && block.text) {
-                addLog(`Agent: ${block.text}`);
-              } else if (block.type === "tool_use") {
-                addLog(`🔧 Using tool: ${block.name}`);
-              }
-            }
-          } else if (typeof event.content === "string") {
-            addLog(`Agent: ${event.content}`);
-          }
-        } else if (event.type === "thinking") {
-          // Add thinking events to log
-          if (event.content?.type === "text") {
-            addLog(`💭 ${event.content.text}`);
-          }
-        } else if (event.type === "user") {
-          // User messages (for interactive mode)
-          const content = event.content?.content;
-          if (Array.isArray(content)) {
-            for (const block of content) {
-              if (block.type === "text" && block.text) {
-                addLog(`You: ${block.text}`);
-              }
-            }
-          }
-        } else if (event.type === "init") {
-          addLog(`Session started (${event.content?.model || "unknown model"})`);
-        }
-        break;
-      }
-
-      case "complete":
-        setStatus("complete");
-        setSetupMd(message.data.files.setupMd);
-        setSetupSh(message.data.files.setupSh);
-        setCost(message.data.cost);
-        addLog("✓ Discovery complete!");
-        if (message.data.cost) {
-          addLog(
-            `Cost: $${message.data.cost.totalUsd.toFixed(4)} (${message.data.cost.inputTokens} in, ${message.data.cost.outputTokens} out)`,
-          );
-        }
-        break;
-
-      case "error":
-        setStatus("error");
-        setError(message.data.error);
-        addLog(`ERROR: ${message.data.error}`);
-        break;
-    }
-  };
-
-  const addLog = (message: string) => {
-    setStreamLog((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+    await session.start(prompt);
   };
 
   const handleApprove = () => {
@@ -191,56 +142,67 @@ export function SetupDiscovery({
   };
 
   const handleRerun = () => {
-    setIsEditing(false);
-    setPendingMessages([]);
-    startDiscovery();
+    session.reset();
+    setSetupMd("");
+    setSetupSh("");
+    setPhase("idle");
   };
 
-  const handleSendMessage = () => {
-    if (!userGuidance.trim()) return;
+  // Quick actions for common guidance
+  const quickActions: QuickAction[] = [
+    {
+      label: "Check Makefile",
+      message: "Check if there's a Makefile and what targets it has",
+    },
+    {
+      label: "Check CI config",
+      message: "Look at the CI/CD configuration to understand how tests are run",
+    },
+    {
+      label: "Focus on tests",
+      message: "What's the best way to run tests? Show me the test commands.",
+    },
+  ];
 
-    if (status === "running") {
-      // Queue message for when discovery restarts
-      setPendingMessages((prev) => [...prev, userGuidance]);
-      addLog(`📝 Queued guidance: ${userGuidance}`);
-    }
-    setUserGuidance("");
-  };
-
-  if (status === "idle") {
+  // Idle state - show start form
+  if (phase === "idle") {
     return (
       <div className="space-y-4">
         <div className="border border-border rounded-lg p-6">
           <h3 className="text-lg font-semibold mb-2">Setup Discovery</h3>
           <p className="text-sm text-muted-foreground mb-4">
             Claude will explore{" "}
-            <code className="font-mono bg-muted px-1 py-0.5 rounded">{owner}/{repo}</code>{" "}
+            <code className="font-mono bg-muted px-1 py-0.5 rounded">
+              {owner}/{repo}
+            </code>{" "}
             and create setup documentation and automation scripts.
           </p>
           <p className="text-sm text-muted-foreground mb-4">This process will:</p>
           <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1 mb-4">
-            <li>Clone and analyze the repository</li>
+            <li>Analyze the repository structure</li>
             <li>Identify build and test commands</li>
             <li>Create SETUP.md documentation</li>
             <li>Generate setup.sh automation script</li>
           </ul>
 
-          {/* Optional guidance input */}
           <div className="mb-4">
             <Label htmlFor="guidance" className="text-sm text-muted-foreground">
-              Optional guidance for Claude (e.g., "tests are in __tests__ folder", "use pnpm")
+              Optional guidance (e.g., "tests are in __tests__ folder", "use pnpm")
             </Label>
             <Textarea
               id="guidance"
-              value={userGuidance}
-              onChange={(e) => setUserGuidance(e.target.value)}
+              value={initialGuidance}
+              onChange={(e) => setInitialGuidance(e.target.value)}
               placeholder="Any hints about this repo's setup..."
               className="mt-1 min-h-[60px] text-sm"
             />
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={() => startDiscovery()} className="bg-orange-600 hover:bg-orange-700">
+            <Button
+              onClick={startDiscovery}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
               Start Discovery
             </Button>
             {onCancel && (
@@ -254,81 +216,74 @@ export function SetupDiscovery({
     );
   }
 
-  if (status === "running") {
+  // Discovering phase - show interactive session
+  if (phase === "discovering") {
     return (
       <div className="space-y-4">
-        <div className="border border-border rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-            <span className="animate-pulse">🔍</span>
-            Exploring Repository...
-          </h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            Claude is analyzing the repository and creating setup files.
-          </p>
-          <ScrollableContainer
-            scrollTrigger={streamLog}
-            className="bg-black/50 rounded-lg p-4 font-mono text-xs h-[300px] space-y-1"
-          >
-            {streamLog.map((log, index) => (
-              <div key={index} className="text-gray-300">
-                {log}
-              </div>
-            ))}
-          </ScrollableContainer>
-
-          {/* Input for guidance during discovery */}
-          <div className="mt-4 flex gap-2">
-            <Textarea
-              value={userGuidance}
-              onChange={(e) => setUserGuidance(e.target.value)}
-              placeholder="Provide guidance (e.g., 'check the Makefile', 'tests use pytest')..."
-              className="min-h-[40px] max-h-[80px] text-sm flex-1"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-            />
-            <Button
-              onClick={handleSendMessage}
-              disabled={!userGuidance.trim()}
-              variant="outline"
-              className="self-end"
-            >
-              Queue
+        <div className="border border-orange-500/30 rounded-lg p-4 h-[500px] flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <span className="animate-pulse">🔍</span>
+              Exploring Repository
+            </h3>
+            <Button variant="outline" size="sm" onClick={() => session.stop()}>
+              Stop
             </Button>
           </div>
-          {pendingMessages.length > 0 && (
-            <p className="text-xs text-muted-foreground mt-2">
-              {pendingMessages.length} message(s) queued - will be included if you re-run
-            </p>
-          )}
+
+          <InteractiveSession
+            messages={session.messages}
+            status={session.status}
+            error={session.error}
+            onSend={session.send}
+            onStop={session.stop}
+            placeholder="Provide guidance or ask questions..."
+            showToolUse={true}
+            quickActions={quickActions}
+            variant="orange"
+            assistantLabel="Claude"
+            className="flex-1 min-h-0"
+          />
         </div>
       </div>
     );
   }
 
-  if (status === "error") {
+  // Error phase
+  if (phase === "error") {
     return (
       <div className="space-y-4">
-        <div className={`border rounded-lg p-4 ${actionInfo ? "border-yellow-500 bg-yellow-950/30" : "border-red-500 bg-red-950/30"}`}>
-          <h3 className={`text-lg font-semibold mb-2 ${actionInfo ? "text-yellow-400" : "text-red-400"}`}>
+        <div
+          className={`border rounded-lg p-4 ${
+            actionInfo
+              ? "border-yellow-500 bg-yellow-950/30"
+              : "border-red-500 bg-red-950/30"
+          }`}
+        >
+          <h3
+            className={`text-lg font-semibold mb-2 ${
+              actionInfo ? "text-yellow-400" : "text-red-400"
+            }`}
+          >
             {actionInfo ? "Action Required" : "Discovery Failed"}
           </h3>
-          <p className={`text-sm mb-4 ${actionInfo ? "text-yellow-200" : "text-red-300"}`}>{error}</p>
+          <p
+            className={`text-sm mb-4 ${
+              actionInfo ? "text-yellow-200" : "text-red-300"
+            }`}
+          >
+            {setupError}
+          </p>
           <div className="flex gap-2">
             {actionInfo ? (
-              <Button
-                asChild
-                className="bg-yellow-600 hover:bg-yellow-700"
-              >
+              <Button asChild className="bg-yellow-600 hover:bg-yellow-700">
                 <a href={actionInfo.url} target="_blank" rel="noopener noreferrer">
                   {actionInfo.label} →
                 </a>
               </Button>
             ) : (
               <Button onClick={handleRerun} variant="outline">
+                <RefreshCw className="h-4 w-4 mr-2" />
                 Try Again
               </Button>
             )}
@@ -338,58 +293,45 @@ export function SetupDiscovery({
               </Button>
             )}
           </div>
-          {actionInfo && (
-            <p className="text-xs text-muted-foreground mt-3">
-              After updating your GitHub App settings, come back and try again.
-            </p>
-          )}
         </div>
-        {streamLog.length > 0 && (
-          <div className="border border-border rounded-lg p-4">
-            <h4 className="text-sm font-semibold mb-2">Discovery Log</h4>
-            <ScrollableContainer
-              scrollTrigger={streamLog}
-              className="bg-black/50 rounded-lg p-4 font-mono text-xs max-h-[200px] space-y-1"
-            >
-              {streamLog.map((log, index) => (
-                <div key={index} className="text-gray-300">
-                  {log}
-                </div>
-              ))}
-            </ScrollableContainer>
-          </div>
-        )}
       </div>
     );
   }
 
-  // status === 'complete'
+  // Review phase - show editable files
   return (
     <div className="space-y-4">
       <div className="border border-green-500 bg-green-950/30 rounded-lg p-4">
-        <h3 className="text-lg font-semibold mb-2 text-green-400">✓ Discovery Complete</h3>
+        <h3 className="text-lg font-semibold mb-2 text-green-400">
+          ✓ Discovery Complete
+        </h3>
         <p className="text-sm text-green-300">
-          Setup files have been generated. Review and edit them below before approving.
+          Setup files have been generated. Review and edit them below before
+          approving.
         </p>
-        {cost && (
+        {session.result?.cost && (
           <p className="text-xs text-muted-foreground mt-2">
-            Cost: ${cost.totalUsd.toFixed(4)} ({cost.inputTokens.toLocaleString()} input,{" "}
-            {cost.outputTokens.toLocaleString()} output tokens)
+            Cost: ${session.result.cost.totalUsd.toFixed(4)} (
+            {session.result.cost.inputTokens.toLocaleString()} input,{" "}
+            {session.result.cost.outputTokens.toLocaleString()} output tokens)
           </p>
         )}
       </div>
 
       <Tabs defaultValue="setupMd" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="setupMd">SETUP.md</TabsTrigger>
           <TabsTrigger value="setupSh">setup.sh</TabsTrigger>
-          <TabsTrigger value="log">Discovery Log</TabsTrigger>
         </TabsList>
 
         <TabsContent value="setupMd" className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="setupMd">Setup Documentation</Label>
-            <Button variant="outline" size="sm" onClick={() => setIsEditing(!isEditing)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditing(!isEditing)}
+            >
               {isEditing ? "Lock" : "Edit"}
             </Button>
           </div>
@@ -405,7 +347,11 @@ export function SetupDiscovery({
         <TabsContent value="setupSh" className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="setupSh">Setup Script</Label>
-            <Button variant="outline" size="sm" onClick={() => setIsEditing(!isEditing)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditing(!isEditing)}
+            >
               {isEditing ? "Lock" : "Edit"}
             </Button>
           </div>
@@ -417,19 +363,6 @@ export function SetupDiscovery({
             className="font-mono text-sm min-h-[400px]"
           />
         </TabsContent>
-
-        <TabsContent value="log">
-          <ScrollableContainer
-            scrollTrigger={streamLog}
-            className="bg-black/50 rounded-lg p-4 font-mono text-xs max-h-[400px] space-y-1"
-          >
-            {streamLog.map((log, index) => (
-              <div key={index} className="text-gray-300">
-                {log}
-              </div>
-            ))}
-          </ScrollableContainer>
-        </TabsContent>
       </Tabs>
 
       <div className="flex gap-2">
@@ -437,6 +370,7 @@ export function SetupDiscovery({
           Approve & Save
         </Button>
         <Button onClick={handleRerun} variant="outline">
+          <RefreshCw className="h-4 w-4 mr-2" />
           Re-run Discovery
         </Button>
         {onCancel && (
