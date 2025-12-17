@@ -41,8 +41,10 @@ export function SetupDiscovery({
   const [actionInfo, setActionInfo] = useState<{ label: string; url: string } | null>(null);
   const [cost, setCost] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [userGuidance, setUserGuidance] = useState("");
+  const [pendingMessages, setPendingMessages] = useState<string[]>([]);
 
-  const startDiscovery = async () => {
+  const startDiscovery = async (additionalGuidance?: string) => {
     setStatus("running");
     setStreamLog([]);
     setError(null);
@@ -51,12 +53,21 @@ export function SetupDiscovery({
     setSetupSh("");
     setCost(null);
 
+    // Combine any initial guidance with additional guidance
+    const allGuidance = [userGuidance, additionalGuidance, ...pendingMessages]
+      .filter(Boolean)
+      .join("\n");
+
+    if (allGuidance) {
+      addLog(`📝 User guidance: ${allGuidance}`);
+    }
+
     try {
       // Use POST endpoint with streaming - API auto-clones the repo
       const response = await fetch(`/api/repos/${owner}/${repo}/setup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ guidance: allGuidance || undefined }),
       });
 
       if (!response.ok) {
@@ -114,12 +125,36 @@ export function SetupDiscovery({
         // Handle different stream event types
         const event = message.data;
         if (event.type === "assistant") {
-          addLog(`Agent: ${event.content}`);
+          // Extract text from assistant message content array
+          const content = event.content?.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === "text" && block.text) {
+                addLog(`Agent: ${block.text}`);
+              } else if (block.type === "tool_use") {
+                addLog(`🔧 Using tool: ${block.name}`);
+              }
+            }
+          } else if (typeof event.content === "string") {
+            addLog(`Agent: ${event.content}`);
+          }
         } else if (event.type === "thinking") {
           // Add thinking events to log
           if (event.content?.type === "text") {
-            addLog(`[Thinking] ${event.content.text}`);
+            addLog(`💭 ${event.content.text}`);
           }
+        } else if (event.type === "user") {
+          // User messages (for interactive mode)
+          const content = event.content?.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === "text" && block.text) {
+                addLog(`You: ${block.text}`);
+              }
+            }
+          }
+        } else if (event.type === "init") {
+          addLog(`Session started (${event.content?.model || "unknown model"})`);
         }
         break;
       }
@@ -157,7 +192,19 @@ export function SetupDiscovery({
 
   const handleRerun = () => {
     setIsEditing(false);
+    setPendingMessages([]);
     startDiscovery();
+  };
+
+  const handleSendMessage = () => {
+    if (!userGuidance.trim()) return;
+
+    if (status === "running") {
+      // Queue message for when discovery restarts
+      setPendingMessages((prev) => [...prev, userGuidance]);
+      addLog(`📝 Queued guidance: ${userGuidance}`);
+    }
+    setUserGuidance("");
   };
 
   if (status === "idle") {
@@ -171,14 +218,29 @@ export function SetupDiscovery({
             and create setup documentation and automation scripts.
           </p>
           <p className="text-sm text-muted-foreground mb-4">This process will:</p>
-          <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1 mb-6">
+          <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1 mb-4">
             <li>Clone and analyze the repository</li>
             <li>Identify build and test commands</li>
             <li>Create SETUP.md documentation</li>
             <li>Generate setup.sh automation script</li>
           </ul>
+
+          {/* Optional guidance input */}
+          <div className="mb-4">
+            <Label htmlFor="guidance" className="text-sm text-muted-foreground">
+              Optional guidance for Claude (e.g., "tests are in __tests__ folder", "use pnpm")
+            </Label>
+            <Textarea
+              id="guidance"
+              value={userGuidance}
+              onChange={(e) => setUserGuidance(e.target.value)}
+              placeholder="Any hints about this repo's setup..."
+              className="mt-1 min-h-[60px] text-sm"
+            />
+          </div>
+
           <div className="flex gap-2">
-            <Button onClick={startDiscovery} className="bg-orange-600 hover:bg-orange-700">
+            <Button onClick={() => startDiscovery()} className="bg-orange-600 hover:bg-orange-700">
               Start Discovery
             </Button>
             {onCancel && (
@@ -205,7 +267,7 @@ export function SetupDiscovery({
           </p>
           <ScrollableContainer
             scrollTrigger={streamLog}
-            className="bg-black/50 rounded-lg p-4 font-mono text-xs h-[400px] space-y-1"
+            className="bg-black/50 rounded-lg p-4 font-mono text-xs h-[300px] space-y-1"
           >
             {streamLog.map((log, index) => (
               <div key={index} className="text-gray-300">
@@ -213,6 +275,35 @@ export function SetupDiscovery({
               </div>
             ))}
           </ScrollableContainer>
+
+          {/* Input for guidance during discovery */}
+          <div className="mt-4 flex gap-2">
+            <Textarea
+              value={userGuidance}
+              onChange={(e) => setUserGuidance(e.target.value)}
+              placeholder="Provide guidance (e.g., 'check the Makefile', 'tests use pytest')..."
+              className="min-h-[40px] max-h-[80px] text-sm flex-1"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+            />
+            <Button
+              onClick={handleSendMessage}
+              disabled={!userGuidance.trim()}
+              variant="outline"
+              className="self-end"
+            >
+              Queue
+            </Button>
+          </div>
+          {pendingMessages.length > 0 && (
+            <p className="text-xs text-muted-foreground mt-2">
+              {pendingMessages.length} message(s) queued - will be included if you re-run
+            </p>
+          )}
         </div>
       </div>
     );

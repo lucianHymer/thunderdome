@@ -678,3 +678,36 @@ If repo URL present, would:
 **Details**: User strongly dislikes git commit --amend. Always create new commits instead of amending, even for small fixes to previous commits. This is a firm user preference.
 ---
 
+### [15:38] [architecture] Trial/Gladiator Streaming Architecture
+**Details**: The trial system uses a multi-level streaming architecture:
+
+1. **Trial Stream Layer** (/api/trials/[id]/stream):
+   - Server-Sent Events (SSE) for one-way streaming from server to client
+   - Broadcasts trial lifecycle events (lanista_complete, battle_started, verdict_complete, etc.)
+   - Events contain phase status updates, error messages, and cost information
+   - Automatically reconnects on connection loss with configurable retry attempts
+
+2. **Gladiator Stream Layer** (/api/gladiators/[id]/stream):
+   - Polls gladiator database every 1 second for updates
+   - Streams events from streamLog JSON field parsed from database
+   - Event types: "text", "tool_use", "status", "complete", "error"
+   - Sends SSE responses with accumulated stream log events
+
+3. **Phase State Derivation**:
+   - Trial events feed into useTrialPhases hook which derives 5 phases:
+     - lanista (planning/design)
+     - battle (gladiator execution)
+     - arbiter (judge selection)
+     - judging (evaluation)
+     - verdict (winner determination)
+   - Each phase has state: "pending" | "active" | "complete" | "error"
+
+4. **Interactive Chat Layer** (Consul Dialog):
+   - Only interactive input mechanism during running trial
+   - Displayed in /api/trials/[id]/consul endpoint
+   - POSTs user messages to Consul API which streams responses back
+   - Uses runAgent to execute Claude with trial context
+   - Stores conversation history in decrees table
+**Files**: src/hooks/use-trial-stream.ts, src/hooks/use-gladiator-stream.ts, src/hooks/use-trial-phases.ts, src/components/trials/consul-dialog.tsx, src/app/api/trials/[id]/stream/route.ts, src/app/api/gladiators/[id]/stream/route.ts, src/app/api/trials/[id]/consul/route.ts
+---
+

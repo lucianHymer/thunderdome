@@ -98,7 +98,7 @@ export async function POST(
     console.log("[Setup Discovery] Claude token retrieved");
 
     const body = await request.json().catch(() => ({}));
-    const { force = false } = body;
+    const { force = false, guidance } = body;
 
     // Check if setup already exists (unless force is true)
     if (!force) {
@@ -216,6 +216,7 @@ export async function POST(
                 ),
               );
             },
+            guidance, // Pass user guidance if provided
           );
 
           if (!result.success || !result.files) {

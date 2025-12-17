@@ -75,6 +75,7 @@ export function parseSetupFiles(text: string): SetupFiles | null {
  * @param workingDir - Local directory where repo is cloned
  * @param oauthToken - Claude OAuth token
  * @param onStream - Optional callback for streaming events
+ * @param userGuidance - Optional user guidance to include in the prompt
  * @returns Setup discovery result with parsed files
  */
 export async function runSetupDiscovery(
@@ -82,9 +83,15 @@ export async function runSetupDiscovery(
   workingDir: string,
   oauthToken: string,
   onStream?: (event: StreamEvent) => void,
+  userGuidance?: string,
 ): Promise<SetupDiscoveryResult> {
   try {
-    const userPrompt = SETUP_DISCOVERY_PROMPT(repoUrl, workingDir);
+    let userPrompt = SETUP_DISCOVERY_PROMPT(repoUrl, workingDir);
+
+    // Append user guidance if provided
+    if (userGuidance) {
+      userPrompt += `\n\n## Additional Guidance from User\n${userGuidance}`;
+    }
 
     // Run Claude agent with streaming
     const agentGen = runAgent(
