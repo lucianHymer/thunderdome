@@ -76,15 +76,18 @@ export async function POST(
   let tempDir: string | null = null;
 
   try {
+    console.log("[Setup Discovery] Starting...");
     const user = await requireUser();
     const { owner, repo } = await params;
     const repoUrl = `https://github.com/${owner}/${repo}`;
     const repoFullName = `${owner}/${repo}`;
+    console.log(`[Setup Discovery] Repo: ${repoFullName}, User: ${user.id}`);
 
     // Get user's Claude token
     const [dbUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
 
     if (!dbUser?.claudeToken) {
+      console.log("[Setup Discovery] No Claude token configured");
       return NextResponse.json(
         { error: "Claude API token not configured. Please set it in settings." },
         { status: 401 },
@@ -92,6 +95,7 @@ export async function POST(
     }
 
     const claudeToken = decrypt(dbUser.claudeToken);
+    console.log("[Setup Discovery] Claude token retrieved");
 
     const body = await request.json().catch(() => ({}));
     const { force = false } = body;
@@ -111,26 +115,33 @@ export async function POST(
     }
 
     // Get GitHub token for cloning
+    console.log("[Setup Discovery] Getting GitHub token...");
     const tokenResult = await getRepoToken(repoFullName, user.id);
     if (!tokenResult) {
+      console.log("[Setup Discovery] No GitHub App installation found");
       return NextResponse.json(
         { error: "No GitHub App installation has access to this repository. Please install the Thunderdome app on this repo." },
         { status: 403 },
       );
     }
+    console.log("[Setup Discovery] GitHub token retrieved");
 
     // Create temp directory and clone repo
     tempDir = join(tmpdir(), `thunderdome-setup-${Date.now()}`);
     await mkdir(tempDir, { recursive: true });
+    console.log(`[Setup Discovery] Created temp dir: ${tempDir}`);
 
-    const cloneUrl = `https://x-access-token:${tokenResult.token}@github.com/${repoFullName}.git`;
     const workingDir = join(tempDir, repo);
 
     try {
+      console.log(`[Setup Discovery] Cloning to ${workingDir}...`);
+      const cloneUrl = `https://x-access-token:${tokenResult.token}@github.com/${repoFullName}.git`;
       await execAsync(`git clone --depth 1 "${cloneUrl}" "${workingDir}"`, {
         timeout: 60000, // 60 second timeout for clone
       });
+      console.log("[Setup Discovery] Clone successful");
     } catch (cloneError) {
+      console.error("[Setup Discovery] Clone failed:", cloneError);
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
       return NextResponse.json(
         { error: `Failed to clone repository: ${cloneError instanceof Error ? cloneError.message : "Unknown error"}` },
@@ -148,11 +159,14 @@ export async function POST(
       }
     };
 
+    console.log("[Setup Discovery] Creating SSE stream...");
+
     // Create SSE stream
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          console.log("[Setup Discovery] Stream started, sending initial event");
           // Send initial event
           controller.enqueue(
             encoder.encode(
@@ -260,7 +274,15 @@ export async function POST(
         Connection: "keep-alive",
       },
     });
-  } catch (_error) {
-    return NextResponse.json({ error: "Failed to start setup discovery" }, { status: 500 });
+  } catch (error) {
+    console.error("Setup discovery error:", error);
+    // Clean up temp dir if it exists
+    if (tempDir) {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to start setup discovery" },
+      { status: 500 }
+    );
   }
 }
