@@ -16,9 +16,10 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
 import {
-  unstable_v2_createSession,
-  type SDKSession,
+  query,
+  type Query,
   type SDKMessage,
+  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
@@ -38,7 +39,8 @@ const CLAUDE_CLI_PATH =
  * Active setup sessions with their temp directories
  */
 interface SetupSession {
-  session: SDKSession;
+  query: Query;
+  inputController: ReadableStreamDefaultController<SDKUserMessage> | null;
   tempDir: string;
   workingDir: string;
   repoUrl: string;
@@ -46,6 +48,7 @@ interface SetupSession {
   claudeToken: string;
   createdAt: Date;
   lastActivityAt: Date;
+  abortController: AbortController;
 }
 
 const activeSessions = new Map<string, SetupSession>();
@@ -69,7 +72,7 @@ async function cleanupSession(sessionId: string) {
   const data = activeSessions.get(sessionId);
   if (data) {
     try {
-      data.session.close();
+      data.abortController.abort();
     } catch {}
     try {
       await rm(data.tempDir, { recursive: true, force: true });
@@ -253,7 +256,7 @@ export async function POST(
     const repoFullName = `${owner}/${repo}`;
 
     const body = await request.json().catch(() => ({}));
-    const { action = "start", sessionId, message, prompt, guidance, force = false } = body;
+    const { action = "start", sessionId, message, guidance, force = false } = body;
 
     // Get user's Claude token
     const [dbUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
@@ -276,7 +279,6 @@ export async function POST(
           repoUrl,
           repoFullName,
           claudeToken,
-          prompt,
           guidance,
           force,
         });
@@ -309,7 +311,6 @@ async function handleStart({
   repoUrl,
   repoFullName,
   claudeToken,
-  prompt,
   guidance,
   force,
 }: {
@@ -319,7 +320,6 @@ async function handleStart({
   repoUrl: string;
   repoFullName: string;
   claudeToken: string;
-  prompt?: string;
   guidance?: string;
   force: boolean;
 }) {
@@ -394,47 +394,16 @@ async function handleStart({
     );
   }
 
-  // Create session with OAuth token
-  const originalToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-  process.env.CLAUDE_CODE_OAUTH_TOKEN = claudeToken;
-
-  let session: SDKSession;
-  try {
-    session = unstable_v2_createSession({
-      model: "opus",
-      pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
-    });
-  } finally {
-    if (originalToken) {
-      process.env.CLAUDE_CODE_OAUTH_TOKEN = originalToken;
-    } else {
-      delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
-    }
-  }
-
   // Generate session ID
   const newSessionId = `setup_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
-  // Store session
-  activeSessions.set(newSessionId, {
-    session,
-    tempDir,
-    workingDir,
-    repoUrl,
-    userId: user.id,
-    claudeToken,
-    createdAt: new Date(),
-    lastActivityAt: new Date(),
-  });
-
   // Build initial prompt
-  let initialPrompt = prompt || `Explore this repository and create setup documentation.
+  let initialPrompt = `Explore this repository and create setup documentation.
 
 # REPOSITORY
 
 URL: ${repoUrl}
 Repository: ${owner}/${repo}
-Working Directory: ${workingDir}
 
 # YOUR TASK
 
@@ -459,14 +428,46 @@ When you're confident you understand the setup, output both files in the exact f
     initialPrompt += `\n\n# GUIDANCE FROM USER\n${guidance}`;
   }
 
+  // Set OAuth token
+  const originalToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  process.env.CLAUDE_CODE_OAUTH_TOKEN = claudeToken;
+
+  // Create abort controller for this session
+  const abortController = new AbortController();
+
+  // Create the query with cwd set to the cloned repo
+  const queryInstance = query({
+    prompt: initialPrompt,
+    options: {
+      systemPrompt: SETUP_DISCOVERY_SYSTEM_PROMPT,
+      model: "opus",
+      cwd: workingDir, // This is the key - set working directory!
+      allowedTools: ["Read", "Glob", "Grep", "Bash"],
+      permissionMode: "bypassPermissions",
+      maxTurns: 50,
+      pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
+      abortController,
+    },
+  });
+
+  // Store session (without input controller for now - we'll handle send differently)
+  activeSessions.set(newSessionId, {
+    query: queryInstance,
+    inputController: null,
+    tempDir,
+    workingDir,
+    repoUrl,
+    userId: user.id,
+    claudeToken,
+    createdAt: new Date(),
+    lastActivityAt: new Date(),
+    abortController,
+  });
+
   // Create streaming response
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      // Set OAuth token for streaming
-      const origToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-      process.env.CLAUDE_CODE_OAUTH_TOKEN = claudeToken;
-
       try {
         // Send session ID to client
         sendSSE(controller, encoder, {
@@ -475,13 +476,8 @@ When you're confident you understand the setup, output both files in the exact f
           workingDir,
         });
 
-        // Send initial prompt with system prompt
-        // Note: The V2 API doesn't support systemPrompt in send(), so we prepend it
-        const fullPrompt = `${SETUP_DISCOVERY_SYSTEM_PROMPT}\n\n---\n\n${initialPrompt}`;
-        await session.send(fullPrompt);
-
-        // Stream responses
-        for await (const message of session.receive()) {
+        // Stream responses from the query
+        for await (const message of queryInstance) {
           const processed = processSDKMessage(message);
           if (processed) {
             sendSSE(controller, encoder, processed);
@@ -493,10 +489,8 @@ When you're confident you understand the setup, output both files in the exact f
             sessionData.lastActivityAt = new Date();
           }
 
-          // Note: We don't break on result - the session stays open for more messages
+          // When we get a result, send turn_complete but keep session alive
           if (message.type === "result") {
-            // Send a "turn_complete" event so client knows this turn is done
-            // but the session is still open for more input
             sendSSE(controller, encoder, { type: "turn_complete" });
           }
         }
@@ -513,8 +507,9 @@ When you're confident you understand the setup, output both files in the exact f
         });
         controller.close();
       } finally {
-        if (origToken) {
-          process.env.CLAUDE_CODE_OAUTH_TOKEN = origToken;
+        // Restore token
+        if (originalToken) {
+          process.env.CLAUDE_CODE_OAUTH_TOKEN = originalToken;
         } else {
           delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
         }
@@ -544,52 +539,74 @@ async function handleSend({
 
   sessionData.lastActivityAt = new Date();
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      const origToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-      process.env.CLAUDE_CODE_OAUTH_TOKEN = claudeToken;
+  // Set OAuth token
+  const originalToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  process.env.CLAUDE_CODE_OAUTH_TOKEN = claudeToken;
 
-      try {
-        // Send user message
-        await sessionData.session.send(message);
+  try {
+    // Create a user message to stream in
+    const userMessage: SDKUserMessage = {
+      type: "user",
+      message: {
+        role: "user",
+        content: message,
+      },
+      parent_tool_use_id: null,
+      session_id: sessionId,
+    };
 
-        // Stream responses
-        for await (const sdkMessage of sessionData.session.receive()) {
-          const processed = processSDKMessage(sdkMessage);
-          if (processed) {
-            sendSSE(controller, encoder, processed);
+    // Create an async iterable with just this message
+    async function* messageStream() {
+      yield userMessage;
+    }
+
+    // Stream the message into the query
+    await sessionData.query.streamInput(messageStream());
+
+    // Now we need to continue reading from the query
+    // The query generator should yield new messages after we send input
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // Continue reading from the query
+          for await (const sdkMessage of sessionData.query) {
+            const processed = processSDKMessage(sdkMessage);
+            if (processed) {
+              sendSSE(controller, encoder, processed);
+            }
+
+            sessionData.lastActivityAt = new Date();
+
+            if (sdkMessage.type === "result") {
+              sendSSE(controller, encoder, { type: "turn_complete" });
+            }
           }
 
-          sessionData.lastActivityAt = new Date();
-
-          if (sdkMessage.type === "result") {
-            sendSSE(controller, encoder, { type: "turn_complete" });
-          }
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        } catch (error) {
+          console.error("[Setup Discovery] Send error:", error);
+          sendSSE(controller, encoder, {
+            type: "error",
+            content: {
+              message: error instanceof Error ? error.message : "Unknown error",
+            },
+          });
+          controller.close();
         }
+      },
+    });
 
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      } catch (error) {
-        console.error("[Setup Discovery] Send error:", error);
-        sendSSE(controller, encoder, {
-          type: "error",
-          content: {
-            message: error instanceof Error ? error.message : "Unknown error",
-          },
-        });
-        controller.close();
-      } finally {
-        if (origToken) {
-          process.env.CLAUDE_CODE_OAUTH_TOKEN = origToken;
-        } else {
-          delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
-        }
-      }
-    },
-  });
-
-  return createSSEResponse(stream);
+    return createSSEResponse(stream);
+  } finally {
+    // Restore token
+    if (originalToken) {
+      process.env.CLAUDE_CODE_OAUTH_TOKEN = originalToken;
+    } else {
+      delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    }
+  }
 }
 
 /**
