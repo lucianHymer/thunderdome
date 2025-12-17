@@ -17,23 +17,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS `repo_setups_repo_url_unique` ON `repo_setups`
 CREATE TABLE IF NOT EXISTS `github_app_installations` (
   `id` text PRIMARY KEY NOT NULL,
   `user_id` text NOT NULL,
-  `installation_id` integer NOT NULL,
+  `installation_id` integer NOT NULL UNIQUE,
   `account_login` text NOT NULL,
   `account_type` text NOT NULL,
-  `repository_selection` text NOT NULL,
+  `repository_selection` text,
+  `suspended_at` integer,
   `created_at` integer DEFAULT (unixepoch()) NOT NULL,
   `updated_at` integer DEFAULT (unixepoch()) NOT NULL,
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS `github_app_installations_installation_id_unique` ON `github_app_installations` (`installation_id`);
 
 CREATE TABLE IF NOT EXISTS `github_app_repos` (
   `id` text PRIMARY KEY NOT NULL,
   `installation_id` integer NOT NULL,
   `repo_full_name` text NOT NULL,
   `repo_id` integer NOT NULL,
-  `private` integer DEFAULT false NOT NULL,
-  `synced_at` integer DEFAULT (unixepoch()) NOT NULL,
+  `private` integer DEFAULT 0 NOT NULL,
+  `created_at` integer DEFAULT (unixepoch()) NOT NULL,
   FOREIGN KEY (`installation_id`) REFERENCES `github_app_installations`(`installation_id`) ON UPDATE no action ON DELETE cascade
 );
