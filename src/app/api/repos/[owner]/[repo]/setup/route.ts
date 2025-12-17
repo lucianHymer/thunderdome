@@ -19,7 +19,6 @@ import {
   query,
   type Query,
   type SDKMessage,
-  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
@@ -39,16 +38,16 @@ const CLAUDE_CLI_PATH =
  * Active setup sessions with their temp directories
  */
 interface SetupSession {
-  query: Query;
-  inputController: ReadableStreamDefaultController<SDKUserMessage> | null;
   tempDir: string;
   workingDir: string;
   repoUrl: string;
+  owner: string;
+  repo: string;
   userId: string;
   claudeToken: string;
   createdAt: Date;
   lastActivityAt: Date;
-  abortController: AbortController;
+  sdkSessionId: string | null; // Session ID from the SDK for resume
 }
 
 const activeSessions = new Map<string, SetupSession>();
@@ -71,9 +70,6 @@ setInterval(() => {
 async function cleanupSession(sessionId: string) {
   const data = activeSessions.get(sessionId);
   if (data) {
-    try {
-      data.abortController.abort();
-    } catch {}
     try {
       await rm(data.tempDir, { recursive: true, force: true });
     } catch {}
@@ -394,7 +390,7 @@ async function handleStart({
     );
   }
 
-  // Generate session ID
+  // Generate our tracking session ID
   const newSessionId = `setup_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
   // Build initial prompt
@@ -428,12 +424,23 @@ When you're confident you understand the setup, output both files in the exact f
     initialPrompt += `\n\n# GUIDANCE FROM USER\n${guidance}`;
   }
 
+  // Store session metadata (we'll capture SDK session ID during streaming)
+  activeSessions.set(newSessionId, {
+    tempDir,
+    workingDir,
+    repoUrl,
+    owner,
+    repo,
+    userId: user.id,
+    claudeToken,
+    createdAt: new Date(),
+    lastActivityAt: new Date(),
+    sdkSessionId: null,
+  });
+
   // Set OAuth token
   const originalToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
   process.env.CLAUDE_CODE_OAUTH_TOKEN = claudeToken;
-
-  // Create abort controller for this session
-  const abortController = new AbortController();
 
   // Create the query with cwd set to the cloned repo
   const queryInstance = query({
@@ -446,22 +453,7 @@ When you're confident you understand the setup, output both files in the exact f
       permissionMode: "bypassPermissions",
       maxTurns: 50,
       pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
-      abortController,
     },
-  });
-
-  // Store session (without input controller for now - we'll handle send differently)
-  activeSessions.set(newSessionId, {
-    query: queryInstance,
-    inputController: null,
-    tempDir,
-    workingDir,
-    repoUrl,
-    userId: user.id,
-    claudeToken,
-    createdAt: new Date(),
-    lastActivityAt: new Date(),
-    abortController,
   });
 
   // Create streaming response
@@ -469,7 +461,7 @@ When you're confident you understand the setup, output both files in the exact f
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        // Send session ID to client
+        // Send our session ID to client
         sendSSE(controller, encoder, {
           type: "session_created",
           sessionId: newSessionId,
@@ -478,6 +470,15 @@ When you're confident you understand the setup, output both files in the exact f
 
         // Stream responses from the query
         for await (const message of queryInstance) {
+          // Capture SDK session ID from init message
+          if (message.type === "system" && message.subtype === "init") {
+            const sessionData = activeSessions.get(newSessionId);
+            if (sessionData && message.session_id) {
+              sessionData.sdkSessionId = message.session_id;
+              console.log(`[Setup Discovery] Captured SDK session ID: ${message.session_id}`);
+            }
+          }
+
           const processed = processSDKMessage(message);
           if (processed) {
             sendSSE(controller, encoder, processed);
@@ -489,7 +490,7 @@ When you're confident you understand the setup, output both files in the exact f
             sessionData.lastActivityAt = new Date();
           }
 
-          // When we get a result, send turn_complete but keep session alive
+          // When we get a result, send turn_complete
           if (message.type === "result") {
             sendSSE(controller, encoder, { type: "turn_complete" });
           }
@@ -537,76 +538,71 @@ async function handleSend({
     return NextResponse.json({ error: "Session not found or expired" }, { status: 404 });
   }
 
+  if (!sessionData.sdkSessionId) {
+    return NextResponse.json({ error: "Session not ready - SDK session ID not captured" }, { status: 400 });
+  }
+
   sessionData.lastActivityAt = new Date();
 
   // Set OAuth token
   const originalToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
   process.env.CLAUDE_CODE_OAUTH_TOKEN = claudeToken;
 
-  try {
-    // Create a user message to stream in
-    const userMessage: SDKUserMessage = {
-      type: "user",
-      message: {
-        role: "user",
-        content: message,
-      },
-      parent_tool_use_id: null,
-      session_id: sessionId,
-    };
+  // Create a new query that resumes the previous session
+  const queryInstance = query({
+    prompt: message,
+    options: {
+      model: "opus",
+      cwd: sessionData.workingDir,
+      allowedTools: ["Read", "Glob", "Grep", "Bash"],
+      permissionMode: "bypassPermissions",
+      maxTurns: 50,
+      pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
+      resume: sessionData.sdkSessionId, // Resume the previous session!
+    },
+  });
 
-    // Create an async iterable with just this message
-    async function* messageStream() {
-      yield userMessage;
-    }
-
-    // Stream the message into the query
-    await sessionData.query.streamInput(messageStream());
-
-    // Now we need to continue reading from the query
-    // The query generator should yield new messages after we send input
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          // Continue reading from the query
-          for await (const sdkMessage of sessionData.query) {
-            const processed = processSDKMessage(sdkMessage);
-            if (processed) {
-              sendSSE(controller, encoder, processed);
-            }
-
-            sessionData.lastActivityAt = new Date();
-
-            if (sdkMessage.type === "result") {
-              sendSSE(controller, encoder, { type: "turn_complete" });
-            }
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        // Stream responses from the resumed query
+        for await (const sdkMessage of queryInstance) {
+          const processed = processSDKMessage(sdkMessage);
+          if (processed) {
+            sendSSE(controller, encoder, processed);
           }
 
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-        } catch (error) {
-          console.error("[Setup Discovery] Send error:", error);
-          sendSSE(controller, encoder, {
-            type: "error",
-            content: {
-              message: error instanceof Error ? error.message : "Unknown error",
-            },
-          });
-          controller.close();
-        }
-      },
-    });
+          sessionData.lastActivityAt = new Date();
 
-    return createSSEResponse(stream);
-  } finally {
-    // Restore token
-    if (originalToken) {
-      process.env.CLAUDE_CODE_OAUTH_TOKEN = originalToken;
-    } else {
-      delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
-    }
-  }
+          if (sdkMessage.type === "result") {
+            sendSSE(controller, encoder, { type: "turn_complete" });
+          }
+        }
+
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      } catch (error) {
+        console.error("[Setup Discovery] Send error:", error);
+        sendSSE(controller, encoder, {
+          type: "error",
+          content: {
+            message: error instanceof Error ? error.message : "Unknown error",
+          },
+        });
+        controller.close();
+      } finally {
+        // Restore token
+        if (originalToken) {
+          process.env.CLAUDE_CODE_OAUTH_TOKEN = originalToken;
+        } else {
+          delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+        }
+      }
+    },
+  });
+
+  return createSSEResponse(stream);
 }
 
 /**
