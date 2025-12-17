@@ -36,3 +36,6 @@ CREATE TABLE IF NOT EXISTS `github_app_repos` (
   `created_at` integer DEFAULT (unixepoch()) NOT NULL,
   FOREIGN KEY (`installation_id`) REFERENCES `github_app_installations`(`installation_id`) ON UPDATE no action ON DELETE cascade
 );
+
+-- If you ran an earlier migration with synced_at, run this to fix:
+-- ALTER TABLE github_app_repos RENAME COLUMN synced_at TO created_at;

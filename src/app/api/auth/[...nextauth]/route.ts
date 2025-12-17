@@ -39,7 +39,10 @@ async function GET(request: NextRequest) {
       await processInstallation(session.user.id, parseInt(installationId, 10), setupAction);
 
       // Redirect to home with success message
-      const redirectUrl = new URL("/", request.url);
+      // Use headers to get the real host, not the internal one
+      const host = request.headers.get("host") || "localhost:3000";
+      const protocol = request.headers.get("x-forwarded-proto") || "https";
+      const redirectUrl = new URL(`${protocol}://${host}/`);
       redirectUrl.searchParams.set("message", `GitHub App ${setupAction}d successfully`);
       return NextResponse.redirect(redirectUrl);
     }
