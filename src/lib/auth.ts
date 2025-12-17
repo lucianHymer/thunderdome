@@ -8,8 +8,10 @@
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
+import { cookies } from "next/headers";
 import { db } from "@/db";
 import { accounts, sessions, users, verificationTokens } from "@/db/schema";
+import { processInstallation } from "@/lib/github/installation";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: DrizzleAdapter(db, {
@@ -38,6 +40,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = user.id;
       }
       return session;
+    },
+  },
+  events: {
+    async signIn({ user }) {
+      // Check for pending installation from GitHub App callback
+      try {
+        const cookieStore = await cookies();
+        const pendingInstallation = cookieStore.get("pending_installation");
+
+        if (pendingInstallation?.value && user.id) {
+          const [installationId, setupAction] = pendingInstallation.value.split(":");
+          if (installationId && setupAction) {
+            console.log(`[Auth] Processing pending installation ${installationId} for user ${user.id}`);
+            await processInstallation(user.id, parseInt(installationId, 10), setupAction);
+            // Cookie will be cleared by expiry or we can clear it in middleware
+          }
+        }
+      } catch (error) {
+        console.error("[Auth] Failed to process pending installation:", error);
+      }
     },
   },
   pages: {

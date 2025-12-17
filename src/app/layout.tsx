@@ -4,6 +4,7 @@ import "./globals.css";
 import Link from "next/link";
 import { SignInButton } from "@/components/auth/sign-in-button";
 import { UserMenu } from "@/components/auth/user-menu";
+import { PendingInstallationHandler } from "@/components/github/pending-installation-handler";
 import { getCurrentUser } from "@/lib/session";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -38,6 +39,7 @@ export default async function RootLayout({
                 <nav className="flex items-center gap-4">
                   {user ? (
                     <>
+                      <PendingInstallationHandler />
                       <Link
                         href="/trials/new"
                         className="px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors"
