@@ -2,7 +2,12 @@
  * Setup Discovery API
  *
  * GET /api/repos/:owner/:repo/setup - Check if setup exists
- * POST /api/repos/:owner/:repo/setup - Run setup discovery (streaming)
+ * POST /api/repos/:owner/:repo/setup - Interactive setup discovery
+ *
+ * Supports actions:
+ * - action: "start" - Clone repo and start interactive session
+ * - action: "send" - Send message to existing session
+ * - action: "stop" - Close session and cleanup
  */
 
 import { exec } from "child_process";
@@ -10,17 +15,193 @@ import { mkdir, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
+import {
+  unstable_v2_createSession,
+  type SDKSession,
+  type SDKMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { repoSetups, users } from "@/db/schema";
-import type { StreamEvent } from "@/lib/claude/types";
 import { decrypt } from "@/lib/encryption";
 import { checkRepoAccess, getInstallationToken } from "@/lib/github/app";
 import { requireUser } from "@/lib/session";
-import { runSetupDiscovery } from "@/lib/setup/discovery";
+import { SETUP_DISCOVERY_SYSTEM_PROMPT } from "@/lib/setup/prompts";
 
 const execAsync = promisify(exec);
+
+const CLAUDE_CLI_PATH =
+  process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
+
+/**
+ * Active setup sessions with their temp directories
+ */
+interface SetupSession {
+  session: SDKSession;
+  tempDir: string;
+  workingDir: string;
+  repoUrl: string;
+  userId: string;
+  claudeToken: string;
+  createdAt: Date;
+  lastActivityAt: Date;
+}
+
+const activeSessions = new Map<string, SetupSession>();
+
+// Clean up stale sessions every 5 minutes
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, data] of activeSessions.entries()) {
+    if (now - data.lastActivityAt.getTime() > SESSION_TIMEOUT_MS) {
+      console.log(`[Setup Session] Cleaning up stale session: ${id}`);
+      cleanupSession(id);
+    }
+  }
+}, 5 * 60 * 1000);
+
+/**
+ * Cleanup a session and its temp directory
+ */
+async function cleanupSession(sessionId: string) {
+  const data = activeSessions.get(sessionId);
+  if (data) {
+    try {
+      data.session.close();
+    } catch {}
+    try {
+      await rm(data.tempDir, { recursive: true, force: true });
+    } catch {}
+    activeSessions.delete(sessionId);
+  }
+}
+
+/**
+ * Process SDK message into streamable format
+ */
+function processSDKMessage(message: SDKMessage): any | null {
+  const timestamp = new Date();
+
+  switch (message.type) {
+    case "system":
+      if (message.subtype === "init") {
+        return {
+          type: "init",
+          content: {
+            model: message.model,
+            tools: message.tools,
+            cwd: message.cwd,
+          },
+          timestamp,
+        };
+      }
+      return null;
+
+    case "assistant": {
+      const content = message.message.content;
+      const textBlocks: string[] = [];
+      const toolUses: any[] = [];
+
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === "text") {
+            textBlocks.push(block.text);
+          } else if (block.type === "tool_use") {
+            toolUses.push({
+              id: block.id,
+              name: block.name,
+              input: block.input,
+            });
+          }
+        }
+      }
+
+      return {
+        type: "assistant",
+        content: {
+          text: textBlocks.join("\n"),
+          toolUses,
+        },
+        timestamp,
+        messageId: message.uuid,
+      };
+    }
+
+    case "user":
+      return {
+        type: "user",
+        content: message.message,
+        timestamp,
+        messageId: message.uuid,
+      };
+
+    case "stream_event":
+      if (message.event?.type === "content_block_delta") {
+        const delta = message.event.delta as any;
+        if (delta?.type === "thinking_delta") {
+          return {
+            type: "thinking",
+            content: { text: delta.thinking },
+            timestamp,
+          };
+        } else if (delta?.type === "text_delta") {
+          return {
+            type: "assistant",
+            content: { text: delta.text, partial: true },
+            timestamp,
+          };
+        }
+      }
+      return null;
+
+    case "result":
+      return {
+        type: "result",
+        content: {
+          success: message.subtype === "success",
+          result: message.subtype === "success" ? (message as any).result : undefined,
+          error: message.subtype !== "success" ? (message as any).errors?.join(", ") : undefined,
+          cost: {
+            totalUsd: message.total_cost_usd,
+            inputTokens: message.usage.input_tokens,
+            outputTokens: message.usage.output_tokens,
+          },
+          turns: message.num_turns,
+        },
+        timestamp,
+        messageId: message.uuid,
+      };
+
+    default:
+      return null;
+  }
+}
+
+/**
+ * Create SSE response helper
+ */
+function createSSEResponse(stream: ReadableStream): NextResponse {
+  return new NextResponse(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
+
+/**
+ * Send SSE event helper
+ */
+function sendSSE(
+  controller: ReadableStreamDefaultController,
+  encoder: TextEncoder,
+  event: any,
+) {
+  controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+}
 
 /**
  * GET - Check if setup exists for a repository
@@ -34,7 +215,6 @@ export async function GET(
     const { owner, repo } = await params;
     const repoUrl = `https://github.com/${owner}/${repo}`;
 
-    // Look up setup in database
     const setup = await db.query.repoSetups.findFirst({
       where: eq(repoSetups.repoUrl, repoUrl),
     });
@@ -60,34 +240,25 @@ export async function GET(
 }
 
 /**
- * POST - Run setup discovery for a repository
- *
- * Request body:
- * {
- *   force?: boolean;  // Force re-discovery even if setup exists
- * }
- *
- * Returns: Server-Sent Events stream with discovery progress
+ * POST - Interactive setup discovery
  */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ owner: string; repo: string }> },
 ) {
-  let tempDir: string | null = null;
-
   try {
-    console.log("[Setup Discovery] Starting...");
     const user = await requireUser();
     const { owner, repo } = await params;
     const repoUrl = `https://github.com/${owner}/${repo}`;
     const repoFullName = `${owner}/${repo}`;
-    console.log(`[Setup Discovery] Repo: ${repoFullName}, User: ${user.id}`);
+
+    const body = await request.json().catch(() => ({}));
+    const { action = "start", sessionId, message, prompt, guidance, force = false } = body;
 
     // Get user's Claude token
     const [dbUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
 
     if (!dbUser?.claudeToken) {
-      console.log("[Setup Discovery] No Claude token configured");
       return NextResponse.json(
         { error: "Claude API token not configured. Please set it in settings." },
         { status: 401 },
@@ -95,218 +266,336 @@ export async function POST(
     }
 
     const claudeToken = decrypt(dbUser.claudeToken);
-    console.log("[Setup Discovery] Claude token retrieved");
 
-    const body = await request.json().catch(() => ({}));
-    const { force = false, guidance } = body;
+    switch (action) {
+      case "start":
+        return handleStart({
+          user,
+          owner,
+          repo,
+          repoUrl,
+          repoFullName,
+          claudeToken,
+          prompt,
+          guidance,
+          force,
+        });
 
-    // Check if setup already exists (unless force is true)
-    if (!force) {
-      const existingSetup = await db.query.repoSetups.findFirst({
-        where: eq(repoSetups.repoUrl, repoUrl),
-      });
+      case "send":
+        return handleSend({ sessionId, message, claudeToken });
 
-      if (existingSetup) {
-        return NextResponse.json(
-          { error: "Setup already exists. Use force=true to re-run discovery." },
-          { status: 409 },
-        );
-      }
+      case "stop":
+        return handleStop({ sessionId });
+
+      default:
+        return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
-
-    // Check GitHub App access
-    console.log("[Setup Discovery] Checking GitHub App access...");
-    const accessResult = await checkRepoAccess(repoFullName, user.id);
-
-    if (!accessResult.hasAccess) {
-      console.log("[Setup Discovery] No access:", accessResult.reason);
-
-      if (accessResult.reason === "no_installation") {
-        return NextResponse.json(
-          {
-            error: "GitHub App not installed",
-            message: "Connect your GitHub account to use Code Battles.",
-            action: "Install GitHub App",
-            actionUrl: "https://github.com/apps/the-thunderdome-app/installations/new",
-          },
-          { status: 403 },
-        );
-      } else {
-        // repo_not_included
-        return NextResponse.json(
-          {
-            error: "Repository not connected",
-            message: `Add "${repoFullName}" to your GitHub App installation.`,
-            action: "Manage Repository Access",
-            actionUrl: `https://github.com/settings/installations/${accessResult.installationId}`,
-          },
-          { status: 403 },
-        );
-      }
-    }
-
-    // Get token for cloning
-    const tokenResult = await getInstallationToken(accessResult.installationId, [repo]);
-    console.log("[Setup Discovery] GitHub token retrieved");
-
-    // Create temp directory and clone repo
-    tempDir = join(tmpdir(), `thunderdome-setup-${Date.now()}`);
-    await mkdir(tempDir, { recursive: true });
-    console.log(`[Setup Discovery] Created temp dir: ${tempDir}`);
-
-    const workingDir = join(tempDir, repo);
-
-    try {
-      console.log(`[Setup Discovery] Cloning to ${workingDir}...`);
-      const cloneUrl = `https://x-access-token:${tokenResult.token}@github.com/${repoFullName}.git`;
-      await execAsync(`git clone --depth 1 "${cloneUrl}" "${workingDir}"`, {
-        timeout: 60000, // 60 second timeout for clone
-      });
-      console.log("[Setup Discovery] Clone successful");
-    } catch (cloneError) {
-      console.error("[Setup Discovery] Clone failed:", cloneError);
-      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-      return NextResponse.json(
-        { error: `Failed to clone repository: ${cloneError instanceof Error ? cloneError.message : "Unknown error"}` },
-        { status: 500 },
-      );
-    }
-
-    // Capture tempDir in closure for cleanup
-    const tempDirToCleanup = tempDir;
-
-    // Helper to clean up temp directory
-    const cleanup = async () => {
-      if (tempDirToCleanup) {
-        await rm(tempDirToCleanup, { recursive: true, force: true }).catch(() => {});
-      }
-    };
-
-    console.log("[Setup Discovery] Creating SSE stream...");
-
-    // Create SSE stream
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          console.log("[Setup Discovery] Stream started, sending initial event");
-          // Send initial event
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: "start",
-                data: { repoUrl, workingDir },
-              })}\n\n`,
-            ),
-          );
-
-          // Run setup discovery with streaming
-          const result = await runSetupDiscovery(
-            repoUrl,
-            workingDir,
-            claudeToken,
-            (event: StreamEvent) => {
-              // Stream each event to the client
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    type: "stream",
-                    data: event,
-                  })}\n\n`,
-                ),
-              );
-            },
-            guidance, // Pass user guidance if provided
-          );
-
-          if (!result.success || !result.files) {
-            // Send error event
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: "error",
-                  data: { error: result.error || "Setup discovery failed" },
-                })}\n\n`,
-              ),
-            );
-            await cleanup();
-            controller.close();
-            return;
-          }
-
-          // Save setup to database
-          const existingSetup = await db.query.repoSetups.findFirst({
-            where: eq(repoSetups.repoUrl, repoUrl),
-          });
-
-          if (existingSetup) {
-            // Update existing
-            await db
-              .update(repoSetups)
-              .set({
-                setupMd: result.files.setupMd,
-                setupSh: result.files.setupSh,
-                updatedAt: new Date(),
-              })
-              .where(eq(repoSetups.id, existingSetup.id));
-          } else {
-            // Create new
-            await db.insert(repoSetups).values({
-              userId: user.id,
-              repoUrl,
-              setupMd: result.files.setupMd,
-              setupSh: result.files.setupSh,
-            });
-          }
-
-          // Send success event with files
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: "complete",
-                data: {
-                  files: result.files,
-                  cost: result.cost,
-                },
-              })}\n\n`,
-            ),
-          );
-
-          await cleanup();
-          controller.close();
-        } catch (error) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: "error",
-                data: {
-                  error: error instanceof Error ? error.message : "Unknown error",
-                },
-              })}\n\n`,
-            ),
-          );
-          await cleanup();
-          controller.close();
-        }
-      },
-    });
-
-    return new NextResponse(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
-    });
   } catch (error) {
-    console.error("Setup discovery error:", error);
-    // Clean up temp dir if it exists
-    if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    }
+    console.error("[Setup Discovery] Error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to start setup discovery" },
-      { status: 500 }
+      { error: error instanceof Error ? error.message : "Unknown error" },
+      { status: 500 },
     );
   }
+}
+
+/**
+ * Handle starting a new setup discovery session
+ */
+async function handleStart({
+  user,
+  owner,
+  repo,
+  repoUrl,
+  repoFullName,
+  claudeToken,
+  prompt,
+  guidance,
+  force,
+}: {
+  user: { id: string };
+  owner: string;
+  repo: string;
+  repoUrl: string;
+  repoFullName: string;
+  claudeToken: string;
+  prompt?: string;
+  guidance?: string;
+  force: boolean;
+}) {
+  // Check if setup already exists (unless force is true)
+  if (!force) {
+    const existingSetup = await db.query.repoSetups.findFirst({
+      where: eq(repoSetups.repoUrl, repoUrl),
+    });
+
+    if (existingSetup) {
+      return NextResponse.json(
+        { error: "Setup already exists. Use force=true to re-run discovery." },
+        { status: 409 },
+      );
+    }
+  }
+
+  // Check GitHub App access
+  console.log("[Setup Discovery] Checking GitHub App access...");
+  const accessResult = await checkRepoAccess(repoFullName, user.id);
+
+  if (!accessResult.hasAccess) {
+    console.log("[Setup Discovery] No access:", accessResult.reason);
+
+    if (accessResult.reason === "no_installation") {
+      return NextResponse.json(
+        {
+          error: "GitHub App not installed",
+          message: "Connect your GitHub account to use Code Battles.",
+          action: "Install GitHub App",
+          actionUrl: "https://github.com/apps/the-thunderdome-app/installations/new",
+        },
+        { status: 403 },
+      );
+    } else {
+      return NextResponse.json(
+        {
+          error: "Repository not connected",
+          message: `Add "${repoFullName}" to your GitHub App installation.`,
+          action: "Manage Repository Access",
+          actionUrl: `https://github.com/settings/installations/${accessResult.installationId}`,
+        },
+        { status: 403 },
+      );
+    }
+  }
+
+  // Get token for cloning
+  const tokenResult = await getInstallationToken(accessResult.installationId, [repo]);
+  console.log("[Setup Discovery] GitHub token retrieved");
+
+  // Create temp directory and clone repo
+  const tempDir = join(tmpdir(), `thunderdome-setup-${Date.now()}`);
+  await mkdir(tempDir, { recursive: true });
+  console.log(`[Setup Discovery] Created temp dir: ${tempDir}`);
+
+  const workingDir = join(tempDir, repo);
+
+  try {
+    console.log(`[Setup Discovery] Cloning to ${workingDir}...`);
+    const cloneUrl = `https://x-access-token:${tokenResult.token}@github.com/${repoFullName}.git`;
+    await execAsync(`git clone --depth 1 "${cloneUrl}" "${workingDir}"`, {
+      timeout: 60000,
+    });
+    console.log("[Setup Discovery] Clone successful");
+  } catch (cloneError) {
+    console.error("[Setup Discovery] Clone failed:", cloneError);
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    return NextResponse.json(
+      { error: `Failed to clone repository: ${cloneError instanceof Error ? cloneError.message : "Unknown error"}` },
+      { status: 500 },
+    );
+  }
+
+  // Create session with OAuth token
+  const originalToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  process.env.CLAUDE_CODE_OAUTH_TOKEN = claudeToken;
+
+  let session: SDKSession;
+  try {
+    session = unstable_v2_createSession({
+      model: "opus",
+      pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
+    });
+  } finally {
+    if (originalToken) {
+      process.env.CLAUDE_CODE_OAUTH_TOKEN = originalToken;
+    } else {
+      delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    }
+  }
+
+  // Generate session ID
+  const newSessionId = `setup_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+
+  // Store session
+  activeSessions.set(newSessionId, {
+    session,
+    tempDir,
+    workingDir,
+    repoUrl,
+    userId: user.id,
+    claudeToken,
+    createdAt: new Date(),
+    lastActivityAt: new Date(),
+  });
+
+  // Build initial prompt
+  let initialPrompt = prompt || `Explore this repository and create setup documentation.
+
+# REPOSITORY
+
+URL: ${repoUrl}
+Repository: ${owner}/${repo}
+Working Directory: ${workingDir}
+
+# YOUR TASK
+
+1. Explore the repository thoroughly
+2. Figure out how to build and test it
+3. Create comprehensive SETUP.md documentation
+4. Create an automated setup.sh script
+
+As you explore, if you're uncertain about anything important (e.g., which test command to use, what environment setup is needed, ambiguous configuration), feel free to ask me for clarification rather than guessing.
+
+When you're confident you understand the setup, output both files in the exact format specified in your system prompt:
+
+\`\`\`setup.md
+[content]
+\`\`\`
+
+\`\`\`setup.sh
+[content]
+\`\`\``;
+
+  if (guidance) {
+    initialPrompt += `\n\n# GUIDANCE FROM USER\n${guidance}`;
+  }
+
+  // Create streaming response
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      // Set OAuth token for streaming
+      const origToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+      process.env.CLAUDE_CODE_OAUTH_TOKEN = claudeToken;
+
+      try {
+        // Send session ID to client
+        sendSSE(controller, encoder, {
+          type: "session_created",
+          sessionId: newSessionId,
+          workingDir,
+        });
+
+        // Send initial prompt with system prompt
+        // Note: The V2 API doesn't support systemPrompt in send(), so we prepend it
+        const fullPrompt = `${SETUP_DISCOVERY_SYSTEM_PROMPT}\n\n---\n\n${initialPrompt}`;
+        await session.send(fullPrompt);
+
+        // Stream responses
+        for await (const message of session.receive()) {
+          const processed = processSDKMessage(message);
+          if (processed) {
+            sendSSE(controller, encoder, processed);
+          }
+
+          // Update activity timestamp
+          const sessionData = activeSessions.get(newSessionId);
+          if (sessionData) {
+            sessionData.lastActivityAt = new Date();
+          }
+
+          // Note: We don't break on result - the session stays open for more messages
+          if (message.type === "result") {
+            // Send a "turn_complete" event so client knows this turn is done
+            // but the session is still open for more input
+            sendSSE(controller, encoder, { type: "turn_complete" });
+          }
+        }
+
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      } catch (error) {
+        console.error("[Setup Discovery] Stream error:", error);
+        sendSSE(controller, encoder, {
+          type: "error",
+          content: {
+            message: error instanceof Error ? error.message : "Unknown error",
+          },
+        });
+        controller.close();
+      } finally {
+        if (origToken) {
+          process.env.CLAUDE_CODE_OAUTH_TOKEN = origToken;
+        } else {
+          delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+        }
+      }
+    },
+  });
+
+  return createSSEResponse(stream);
+}
+
+/**
+ * Handle sending a message to an existing session
+ */
+async function handleSend({
+  sessionId,
+  message,
+  claudeToken,
+}: {
+  sessionId: string;
+  message: string;
+  claudeToken: string;
+}) {
+  const sessionData = activeSessions.get(sessionId);
+  if (!sessionData) {
+    return NextResponse.json({ error: "Session not found or expired" }, { status: 404 });
+  }
+
+  sessionData.lastActivityAt = new Date();
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const origToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+      process.env.CLAUDE_CODE_OAUTH_TOKEN = claudeToken;
+
+      try {
+        // Send user message
+        await sessionData.session.send(message);
+
+        // Stream responses
+        for await (const sdkMessage of sessionData.session.receive()) {
+          const processed = processSDKMessage(sdkMessage);
+          if (processed) {
+            sendSSE(controller, encoder, processed);
+          }
+
+          sessionData.lastActivityAt = new Date();
+
+          if (sdkMessage.type === "result") {
+            sendSSE(controller, encoder, { type: "turn_complete" });
+          }
+        }
+
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      } catch (error) {
+        console.error("[Setup Discovery] Send error:", error);
+        sendSSE(controller, encoder, {
+          type: "error",
+          content: {
+            message: error instanceof Error ? error.message : "Unknown error",
+          },
+        });
+        controller.close();
+      } finally {
+        if (origToken) {
+          process.env.CLAUDE_CODE_OAUTH_TOKEN = origToken;
+        } else {
+          delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+        }
+      }
+    },
+  });
+
+  return createSSEResponse(stream);
+}
+
+/**
+ * Handle stopping a session
+ */
+async function handleStop({ sessionId }: { sessionId: string }) {
+  await cleanupSession(sessionId);
+  return NextResponse.json({ success: true });
 }

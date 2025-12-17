@@ -8,14 +8,13 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { InteractiveSession, type QuickAction } from "@/components/ui/interactive-session";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { useInteractiveSession, type SessionMessage } from "@/hooks/use-interactive-session";
-import { SETUP_DISCOVERY_SYSTEM_PROMPT } from "@/lib/setup/prompts";
+import type { SessionMessage, SessionStatus } from "@/hooks/use-interactive-session";
 
 interface SetupDiscoveryProps {
   owner: string;
@@ -57,96 +56,327 @@ export function SetupDiscovery({
   const [setupError, setSetupError] = useState<string | null>(null);
   const [actionInfo, setActionInfo] = useState<{ label: string; url: string } | null>(null);
 
-  const session = useInteractiveSession({
-    apiEndpoint: "/api/agent/session",
-    systemPrompt: SETUP_DISCOVERY_SYSTEM_PROMPT,
-    model: "opus",
-    allowedTools: ["Read", "Glob", "Grep", "Bash"],
-    permissionMode: "bypassPermissions",
-  });
+  // Session state
+  const [messages, setMessages] = useState<SessionMessage[]>([]);
+  const [status, setStatus] = useState<SessionStatus>("idle");
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [cost, setCost] = useState<{ totalUsd: number; inputTokens: number; outputTokens: number } | null>(null);
 
-  // Watch for completion and parse results
-  useEffect(() => {
-    if (session.result && session.status === "complete") {
-      // Try to parse setup files from the result
-      const lastAssistantMessage = session.messages
-        .filter((m) => m.role === "assistant")
-        .pop();
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const currentAssistantContentRef = useRef<string>("");
 
-      if (lastAssistantMessage) {
-        const files = parseSetupFiles(lastAssistantMessage.content);
+  const apiEndpoint = `/api/repos/${owner}/${repo}/setup`;
+
+  /**
+   * Process SSE stream from setup API
+   */
+  const processStream = useCallback(async (response: Response) => {
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+
+          const data = line.slice(6);
+          if (data === "[DONE]") continue;
+
+          try {
+            const event = JSON.parse(data);
+            handleStreamEvent(event);
+          } catch {
+            // Ignore parse errors for partial data
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }, []);
+
+  /**
+   * Handle individual stream events
+   */
+  const handleStreamEvent = useCallback((event: any) => {
+    switch (event.type) {
+      case "session_created":
+        setSessionId(event.sessionId);
+        setStatus("streaming");
+        break;
+
+      case "init":
+        // Session initialized
+        break;
+
+      case "assistant": {
+        const { text, toolUses, partial } = event.content || {};
+
+        if (partial && text) {
+          // Accumulate partial text
+          currentAssistantContentRef.current += text;
+
+          setMessages((prev) => {
+            const existingIdx = prev.findIndex(
+              (m) => m.role === "assistant" && m.isPartial,
+            );
+
+            if (existingIdx >= 0) {
+              const updated = [...prev];
+              updated[existingIdx] = {
+                ...updated[existingIdx],
+                content: currentAssistantContentRef.current,
+              };
+              return updated;
+            } else {
+              return [
+                ...prev,
+                {
+                  id: `assistant_${Date.now()}`,
+                  role: "assistant",
+                  content: currentAssistantContentRef.current,
+                  isPartial: true,
+                  timestamp: new Date(),
+                },
+              ];
+            }
+          });
+        } else if (text || toolUses?.length) {
+          // Complete assistant message
+          currentAssistantContentRef.current = "";
+
+          setMessages((prev) => {
+            const filtered = prev.filter((m) => !m.isPartial);
+            return [
+              ...filtered,
+              {
+                id: event.messageId || `assistant_${Date.now()}`,
+                role: "assistant",
+                content: text || "",
+                toolUses,
+                isPartial: false,
+                timestamp: new Date(),
+              },
+            ];
+          });
+        }
+        break;
+      }
+
+      case "result": {
+        // A turn completed, but session may still be open
+        const { cost: resultCost } = event.content || {};
+        if (resultCost) {
+          setCost(resultCost);
+        }
+
+        // Check if we got the setup files in the last message
+        const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
+        if (lastAssistant) {
+          const files = parseSetupFiles(lastAssistant.content);
+          if (files) {
+            setSetupMd(files.setupMd);
+            setSetupSh(files.setupSh);
+          }
+        }
+        break;
+      }
+
+      case "turn_complete":
+        // Turn is done, we're waiting for user input or completion
+        setStatus("waiting");
+
+        // Check for setup files in all messages
+        const allContent = messages
+          .filter((m) => m.role === "assistant")
+          .map((m) => m.content)
+          .join("\n\n");
+        const files = parseSetupFiles(allContent);
         if (files) {
           setSetupMd(files.setupMd);
           setSetupSh(files.setupSh);
           setPhase("review");
-        } else {
-          setSetupError("Could not parse setup files from response. The agent may not have finished properly.");
-          setPhase("error");
         }
-      }
-    }
-  }, [session.result, session.status, session.messages]);
+        break;
 
-  // Watch for errors
-  useEffect(() => {
-    if (session.error) {
-      setSetupError(session.error);
-      setPhase("error");
+      case "error":
+        setSetupError(event.content?.message || event.error || "Unknown error");
+        setStatus("error");
+        setPhase("error");
+        break;
     }
-  }, [session.error]);
+  }, [messages]);
 
+  /**
+   * Start discovery
+   */
   const startDiscovery = async () => {
     setPhase("discovering");
+    setMessages([]);
     setSetupError(null);
     setActionInfo(null);
+    setCost(null);
+    currentAssistantContentRef.current = "";
 
-    const repoUrl = `https://github.com/${owner}/${repo}`;
+    abortControllerRef.current = new AbortController();
+    setStatus("connecting");
 
-    let prompt = `Explore this repository and create setup documentation.
+    try {
+      const response = await fetch(apiEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "start",
+          guidance: initialGuidance.trim() || undefined,
+          force: true, // Always force for now to allow re-runs
+        }),
+        signal: abortControllerRef.current.signal,
+      });
 
-# REPOSITORY
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
 
-URL: ${repoUrl}
-Repository: ${owner}/${repo}
+        // Check for actionable errors (GitHub App not installed, etc.)
+        if (errorData.actionUrl) {
+          setActionInfo({ label: errorData.action, url: errorData.actionUrl });
+          setSetupError(errorData.message || errorData.error);
+          setPhase("error");
+          return;
+        }
 
-# YOUR TASK
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
 
-1. Explore the repository thoroughly
-2. Figure out how to build and test it
-3. Create comprehensive SETUP.md documentation
-4. Create an automated setup.sh script
+      // Add user message for initial prompt
+      setMessages([
+        {
+          id: `user_${Date.now()}`,
+          role: "user",
+          content: initialGuidance.trim()
+            ? `Explore ${owner}/${repo} and create setup docs.\n\nGuidance: ${initialGuidance.trim()}`
+            : `Explore ${owner}/${repo} and create setup docs.`,
+          timestamp: new Date(),
+        },
+      ]);
 
-As you explore, if you're uncertain about anything important (e.g., which test command to use, what environment setup is needed, ambiguous configuration), feel free to ask me for clarification rather than guessing.
+      await processStream(response);
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        setStatus("idle");
+        setPhase("idle");
+      } else {
+        setSetupError((err as Error).message);
+        setStatus("error");
+        setPhase("error");
+      }
+    }
+  };
 
-When you're confident you understand the setup, output both files in the exact format specified in your system prompt:
+  /**
+   * Send a message to the session
+   */
+  const sendMessage = async (content: string) => {
+    if (!sessionId || !content.trim()) return;
 
-\`\`\`setup.md
-[content]
-\`\`\`
+    // Add user message immediately
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `user_${Date.now()}`,
+        role: "user",
+        content: content.trim(),
+        timestamp: new Date(),
+      },
+    ]);
 
-\`\`\`setup.sh
-[content]
-\`\`\``;
+    currentAssistantContentRef.current = "";
+    setStatus("streaming");
 
-    if (initialGuidance.trim()) {
-      prompt += `\n\n# GUIDANCE FROM USER\n${initialGuidance.trim()}`;
+    try {
+      const response = await fetch(apiEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "send",
+          sessionId,
+          message: content.trim(),
+        }),
+        signal: abortControllerRef.current?.signal,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      await processStream(response);
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setSetupError((err as Error).message);
+        setStatus("error");
+      }
+    }
+  };
+
+  /**
+   * Stop the session
+   */
+  const stopSession = () => {
+    abortControllerRef.current?.abort();
+
+    if (sessionId) {
+      fetch(apiEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "stop",
+          sessionId,
+        }),
+      }).catch(() => {});
     }
 
-    await session.start(prompt);
+    setStatus("idle");
   };
 
   const handleApprove = () => {
+    stopSession();
     if (onComplete) {
       onComplete({ setupMd, setupSh });
     }
   };
 
   const handleRerun = () => {
-    session.reset();
+    stopSession();
+    setMessages([]);
     setSetupMd("");
     setSetupSh("");
+    setSessionId(null);
+    setCost(null);
     setPhase("idle");
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (sessionId) {
+        fetch(apiEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "stop", sessionId }),
+        }).catch(() => {});
+      }
+    };
+  }, [sessionId, apiEndpoint]);
 
   // Quick actions for common guidance
   const quickActions: QuickAction[] = [
@@ -161,6 +391,10 @@ When you're confident you understand the setup, output both files in the exact f
     {
       label: "Focus on tests",
       message: "What's the best way to run tests? Show me the test commands.",
+    },
+    {
+      label: "Generate files now",
+      message: "I think you have enough info. Please generate the setup.md and setup.sh files now.",
     },
   ];
 
@@ -179,7 +413,7 @@ When you're confident you understand the setup, output both files in the exact f
           </p>
           <p className="text-sm text-muted-foreground mb-4">This process will:</p>
           <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1 mb-4">
-            <li>Analyze the repository structure</li>
+            <li>Clone and analyze the repository</li>
             <li>Identify build and test commands</li>
             <li>Create SETUP.md documentation</li>
             <li>Generate setup.sh automation script</li>
@@ -226,17 +460,17 @@ When you're confident you understand the setup, output both files in the exact f
               <span className="animate-pulse">🔍</span>
               Exploring Repository
             </h3>
-            <Button variant="outline" size="sm" onClick={() => session.stop()}>
+            <Button variant="outline" size="sm" onClick={stopSession}>
               Stop
             </Button>
           </div>
 
           <InteractiveSession
-            messages={session.messages}
-            status={session.status}
-            error={session.error}
-            onSend={session.send}
-            onStop={session.stop}
+            messages={messages}
+            status={status}
+            error={setupError}
+            onSend={sendMessage}
+            onStop={stopSession}
             placeholder="Provide guidance or ask questions..."
             showToolUse={true}
             quickActions={quickActions}
@@ -309,11 +543,11 @@ When you're confident you understand the setup, output both files in the exact f
           Setup files have been generated. Review and edit them below before
           approving.
         </p>
-        {session.result?.cost && (
+        {cost && (
           <p className="text-xs text-muted-foreground mt-2">
-            Cost: ${session.result.cost.totalUsd.toFixed(4)} (
-            {session.result.cost.inputTokens.toLocaleString()} input,{" "}
-            {session.result.cost.outputTokens.toLocaleString()} output tokens)
+            Cost: ${cost.totalUsd.toFixed(4)} (
+            {cost.inputTokens.toLocaleString()} input,{" "}
+            {cost.outputTokens.toLocaleString()} output tokens)
           </p>
         )}
       </div>
