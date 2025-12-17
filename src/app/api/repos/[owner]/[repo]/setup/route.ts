@@ -16,7 +16,7 @@ import { db } from "@/db";
 import { repoSetups, users } from "@/db/schema";
 import type { StreamEvent } from "@/lib/claude/types";
 import { decrypt } from "@/lib/encryption";
-import { getRepoToken } from "@/lib/github/app";
+import { checkRepoAccess, getInstallationToken } from "@/lib/github/app";
 import { requireUser } from "@/lib/session";
 import { runSetupDiscovery } from "@/lib/setup/discovery";
 
@@ -114,16 +114,39 @@ export async function POST(
       }
     }
 
-    // Get GitHub token for cloning
-    console.log("[Setup Discovery] Getting GitHub token...");
-    const tokenResult = await getRepoToken(repoFullName, user.id);
-    if (!tokenResult) {
-      console.log("[Setup Discovery] No GitHub App installation found");
-      return NextResponse.json(
-        { error: "No GitHub App installation has access to this repository. Please install the Thunderdome app on this repo." },
-        { status: 403 },
-      );
+    // Check GitHub App access
+    console.log("[Setup Discovery] Checking GitHub App access...");
+    const accessResult = await checkRepoAccess(repoFullName, user.id);
+
+    if (!accessResult.hasAccess) {
+      console.log("[Setup Discovery] No access:", accessResult.reason);
+
+      if (accessResult.reason === "no_installation") {
+        return NextResponse.json(
+          {
+            error: "GitHub App not installed",
+            message: "Connect your GitHub account to use Code Battles.",
+            action: "Install GitHub App",
+            actionUrl: "https://github.com/apps/thunderdome-code-battles/installations/new",
+          },
+          { status: 403 },
+        );
+      } else {
+        // repo_not_included
+        return NextResponse.json(
+          {
+            error: "Repository not connected",
+            message: `Add "${repoFullName}" to your GitHub App installation.`,
+            action: "Manage Repository Access",
+            actionUrl: `https://github.com/settings/installations/${accessResult.installationId}`,
+          },
+          { status: 403 },
+        );
+      }
     }
+
+    // Get token for cloning
+    const tokenResult = await getInstallationToken(accessResult.installationId, [repo]);
     console.log("[Setup Discovery] GitHub token retrieved");
 
     // Create temp directory and clone repo

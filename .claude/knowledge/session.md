@@ -674,3 +674,7 @@ If repo URL present, would:
 **Files**: /workspace/project/src/lib/trial/broadcast.ts, /workspace/project/src/lib/trial/state.ts, /workspace/project/src/hooks/use-trial-stream.ts, /workspace/project/src/hooks/use-gladiator-stream.ts, /workspace/project/src/components/trials/battle-view.tsx, /workspace/project/src/components/trials/status-banner.tsx, /workspace/project/src/components/trials/gladiator-panel.tsx, /workspace/project/src/app/api/trials/[id]/stream/route.ts, /workspace/project/src/app/api/gladiators/[id]/stream/route.ts
 ---
 
+### [14:48] [workflow] Never amend git commits
+**Details**: User strongly dislikes git commit --amend. Always create new commits instead of amending, even for small fixes to previous commits. This is a firm user preference.
+---
+

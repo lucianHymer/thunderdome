@@ -147,6 +147,90 @@ export async function findInstallationForRepo(
 }
 
 /**
+ * Result of checking repo access - includes reason for failure
+ */
+export type RepoAccessResult =
+  | { hasAccess: true; installationId: number; accountLogin: string }
+  | { hasAccess: false; reason: "no_installation" }
+  | { hasAccess: false; reason: "repo_not_included"; installationId: number };
+
+/**
+ * Check if user has access to a repo and why not if they don't
+ */
+export async function checkRepoAccess(
+  repoFullName: string,
+  userId: string
+): Promise<RepoAccessResult> {
+  // First check our cached repos
+  const cachedRepo = await db
+    .select({
+      installationId: githubAppRepos.installationId,
+      accountLogin: githubAppInstallations.accountLogin,
+    })
+    .from(githubAppRepos)
+    .innerJoin(
+      githubAppInstallations,
+      eq(githubAppRepos.installationId, githubAppInstallations.installationId)
+    )
+    .where(
+      and(
+        eq(githubAppRepos.repoFullName, repoFullName),
+        eq(githubAppInstallations.userId, userId)
+      )
+    )
+    .limit(1);
+
+  if (cachedRepo.length > 0) {
+    return {
+      hasAccess: true,
+      installationId: cachedRepo[0].installationId,
+      accountLogin: cachedRepo[0].accountLogin,
+    };
+  }
+
+  // Check if user has any installation at all
+  const anyInstallation = await db
+    .select()
+    .from(githubAppInstallations)
+    .where(eq(githubAppInstallations.userId, userId))
+    .limit(1);
+
+  if (anyInstallation.length === 0) {
+    return { hasAccess: false, reason: "no_installation" };
+  }
+
+  // User has installation but repo isn't included
+  // Check if it's an "all repos" installation that might have access
+  const allReposInstallation = anyInstallation.find(
+    (i) => i.repositorySelection === "all"
+  );
+
+  if (allReposInstallation) {
+    try {
+      const octokit = await getInstallationOctokit(
+        allReposInstallation.installationId
+      );
+      const [owner, repo] = repoFullName.split("/");
+      await octokit.rest.repos.get({ owner, repo });
+      return {
+        hasAccess: true,
+        installationId: allReposInstallation.installationId,
+        accountLogin: allReposInstallation.accountLogin,
+      };
+    } catch {
+      // Repo not accessible even with "all" selection
+    }
+  }
+
+  // Has installation but repo not included
+  return {
+    hasAccess: false,
+    reason: "repo_not_included",
+    installationId: anyInstallation[0].installationId,
+  };
+}
+
+/**
  * Get a token for git operations on a specific repository
  * Returns null if no installation has access to the repo
  */

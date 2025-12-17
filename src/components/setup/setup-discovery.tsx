@@ -38,6 +38,7 @@ export function SetupDiscovery({
   const [setupMd, setSetupMd] = useState("");
   const [setupSh, setSetupSh] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [actionInfo, setActionInfo] = useState<{ label: string; url: string } | null>(null);
   const [cost, setCost] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
 
@@ -45,6 +46,7 @@ export function SetupDiscovery({
     setStatus("running");
     setStreamLog([]);
     setError(null);
+    setActionInfo(null);
     setSetupMd("");
     setSetupSh("");
     setCost(null);
@@ -59,6 +61,14 @@ export function SetupDiscovery({
 
       if (!response.ok) {
         const data = await response.json();
+        // Check if there's an actionable error (GitHub App not installed/repo not connected)
+        if (data.actionUrl) {
+          setStatus("error");
+          setError(data.message || data.error);
+          // Store action info for the error UI
+          setActionInfo({ label: data.action, url: data.actionUrl });
+          return;
+        }
         throw new Error(data.error || "Failed to start setup discovery");
       }
 
@@ -211,33 +221,53 @@ export function SetupDiscovery({
   if (status === "error") {
     return (
       <div className="space-y-4">
-        <div className="border border-red-500 bg-red-950/30 rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-2 text-red-400">Discovery Failed</h3>
-          <p className="text-sm text-red-300 mb-4">{error}</p>
+        <div className={`border rounded-lg p-4 ${actionInfo ? "border-yellow-500 bg-yellow-950/30" : "border-red-500 bg-red-950/30"}`}>
+          <h3 className={`text-lg font-semibold mb-2 ${actionInfo ? "text-yellow-400" : "text-red-400"}`}>
+            {actionInfo ? "Action Required" : "Discovery Failed"}
+          </h3>
+          <p className={`text-sm mb-4 ${actionInfo ? "text-yellow-200" : "text-red-300"}`}>{error}</p>
           <div className="flex gap-2">
-            <Button onClick={handleRerun} variant="outline">
-              Try Again
-            </Button>
+            {actionInfo ? (
+              <Button
+                asChild
+                className="bg-yellow-600 hover:bg-yellow-700"
+              >
+                <a href={actionInfo.url} target="_blank" rel="noopener noreferrer">
+                  {actionInfo.label} →
+                </a>
+              </Button>
+            ) : (
+              <Button onClick={handleRerun} variant="outline">
+                Try Again
+              </Button>
+            )}
             {onCancel && (
               <Button onClick={onCancel} variant="outline">
                 Cancel
               </Button>
             )}
           </div>
+          {actionInfo && (
+            <p className="text-xs text-muted-foreground mt-3">
+              After updating your GitHub App settings, come back and try again.
+            </p>
+          )}
         </div>
-        <div className="border border-border rounded-lg p-4">
-          <h4 className="text-sm font-semibold mb-2">Discovery Log</h4>
-          <ScrollableContainer
-            scrollTrigger={streamLog}
-            className="bg-black/50 rounded-lg p-4 font-mono text-xs max-h-[200px] space-y-1"
-          >
-            {streamLog.map((log, index) => (
-              <div key={index} className="text-gray-300">
-                {log}
-              </div>
-            ))}
-          </ScrollableContainer>
-        </div>
+        {streamLog.length > 0 && (
+          <div className="border border-border rounded-lg p-4">
+            <h4 className="text-sm font-semibold mb-2">Discovery Log</h4>
+            <ScrollableContainer
+              scrollTrigger={streamLog}
+              className="bg-black/50 rounded-lg p-4 font-mono text-xs max-h-[200px] space-y-1"
+            >
+              {streamLog.map((log, index) => (
+                <div key={index} className="text-gray-300">
+                  {log}
+                </div>
+              ))}
+            </ScrollableContainer>
+          </div>
+        )}
       </div>
     );
   }

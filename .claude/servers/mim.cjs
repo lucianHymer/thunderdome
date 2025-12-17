@@ -5,11 +5,13 @@ const path = require("node:path");
 
 // Helper to send JSON-RPC responses
 function respond(id, result) {
-  const _response = { jsonrpc: "2.0", id, result };
+  const response = { jsonrpc: "2.0", id, result };
+  process.stdout.write(JSON.stringify(response) + '\n');
 }
 
 function respondError(id, code, message) {
-  const _response = { jsonrpc: "2.0", id, error: { code, message } };
+  const response = { jsonrpc: "2.0", id, error: { code, message } };
+  process.stdout.write(JSON.stringify(response) + '\n');
 }
 
 // The actual remembering function
