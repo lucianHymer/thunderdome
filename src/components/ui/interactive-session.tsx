@@ -7,9 +7,9 @@
 
 "use client";
 
-import { Loader2, Send, Square } from "lucide-react";
+import { Loader2, Send, Square, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionMessage, SessionStatus } from "@/hooks/use-interactive-session";
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
@@ -45,7 +45,7 @@ export interface InteractiveSessionProps {
   // Customization
   /** Input placeholder text */
   placeholder?: string;
-  /** Whether to show tool usage in the message stream */
+  /** Whether to show tool status bar (current tool + count) */
   showToolUse?: boolean;
   /** Whether to show thinking/reasoning */
   showThinking?: boolean;
@@ -113,26 +113,18 @@ function getThemeClasses(variant: InteractiveSessionProps["variant"] = "default"
  */
 function DefaultMessage({
   message,
-  showToolUse,
   userLabel = "You",
   assistantLabel = "Assistant",
   theme,
 }: {
   message: SessionMessage;
-  showToolUse?: boolean;
   userLabel?: string;
   assistantLabel?: string;
   theme: ReturnType<typeof getThemeClasses>;
 }) {
+  // Don't render system messages (tool use) - we show those in the status bar
   if (message.role === "system") {
-    if (!showToolUse) return null;
-    return (
-      <div className="flex justify-center">
-        <div className="text-xs text-muted-foreground bg-muted/30 rounded px-2 py-1">
-          {message.content}
-        </div>
-      </div>
-    );
+    return null;
   }
 
   const isUser = message.role === "user";
@@ -157,14 +149,41 @@ function DefaultMessage({
             <Markdown>{message.content}</Markdown>
           )}
         </div>
-        {message.toolUses && message.toolUses.length > 0 && showToolUse && (
-          <div className="mt-2 pt-2 border-t border-border/50">
-            <div className="text-xs text-muted-foreground">
-              Tools used: {message.toolUses.map((t) => t.name).join(", ")}
-            </div>
-          </div>
-        )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Tool status indicator - shows current tool and count
+ */
+function ToolStatus({
+  currentTool,
+  toolCount,
+  theme,
+}: {
+  currentTool: string | null;
+  toolCount: number;
+  theme: ReturnType<typeof getThemeClasses>;
+}) {
+  if (!currentTool && toolCount === 0) return null;
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+      <Wrench className={cn("h-3 w-3", theme.accent)} />
+      {currentTool ? (
+        <span className="flex items-center gap-2">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          <span className={theme.accent}>{currentTool}</span>
+        </span>
+      ) : (
+        <span>Idle</span>
+      )}
+      {toolCount > 0 && (
+        <span className="ml-auto tabular-nums">
+          {toolCount} tool{toolCount !== 1 ? "s" : ""} used
+        </span>
+      )}
     </div>
   );
 }
@@ -213,6 +232,33 @@ export function InteractiveSession({
   const canSend = !isStreaming && !disabled && input.trim().length > 0;
   const showQuickActions = quickActions && quickActions.length > 0 && !isStreaming && messages.length > 0;
 
+  // Compute tool stats from messages
+  const { currentTool, toolCount } = useMemo(() => {
+    let count = 0;
+    let lastTool: string | null = null;
+
+    for (const msg of messages) {
+      // Count tool uses from assistant messages
+      if (msg.toolUses) {
+        count += msg.toolUses.length;
+        if (msg.toolUses.length > 0) {
+          lastTool = msg.toolUses[msg.toolUses.length - 1].name;
+        }
+      }
+      // Count system messages (which are tool use notifications)
+      if (msg.role === "system" && msg.content.startsWith("Using tool:")) {
+        count++;
+        lastTool = msg.content.replace("Using tool: ", "");
+      }
+    }
+
+    // Only show current tool if streaming
+    return {
+      currentTool: isStreaming ? lastTool : null,
+      toolCount: count,
+    };
+  }, [messages, isStreaming]);
+
   // Auto-resize textarea
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -257,7 +303,6 @@ export function InteractiveSession({
               <DefaultMessage
                 key={message.id}
                 message={message}
-                showToolUse={showToolUse}
                 userLabel={userLabel}
                 assistantLabel={assistantLabel}
                 theme={theme}
@@ -269,6 +314,13 @@ export function InteractiveSession({
           )}
         </div>
       </ScrollableContainer>
+
+      {/* Tool Status */}
+      {showToolUse && (currentTool || toolCount > 0) && (
+        <div className="shrink-0 mb-2">
+          <ToolStatus currentTool={currentTool} toolCount={toolCount} theme={theme} />
+        </div>
+      )}
 
       {/* Error */}
       {error && (
