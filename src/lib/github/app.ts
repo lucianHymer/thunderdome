@@ -285,7 +285,7 @@ export async function syncInstallationRepos(
 export function getInstallationUrl(): string {
   const { appId } = getAppConfig();
   // GitHub uses the app slug (name in URL format) but we can use installation endpoint
-  return `https://github.com/apps/thunderdome-code-battles/installations/new`;
+  return `https://github.com/apps/the-thunderdome-app/installations/new`;
 }
 
 /**

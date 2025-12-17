@@ -127,7 +127,7 @@ export async function POST(
             error: "GitHub App not installed",
             message: "Connect your GitHub account to use Code Battles.",
             action: "Install GitHub App",
-            actionUrl: "https://github.com/apps/thunderdome-code-battles/installations/new",
+            actionUrl: "https://github.com/apps/the-thunderdome-app/installations/new",
           },
           { status: 403 },
         );

@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/session";
 
-const GITHUB_APP_SLUG = "thunderdome-code-battles"; // Update this to your app's slug
+const GITHUB_APP_SLUG = "the-thunderdome-app"; // Update this to your app's slug
 
 export async function GET() {
   try {
