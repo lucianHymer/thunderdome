@@ -127,6 +127,11 @@ function DefaultMessage({
     return null;
   }
 
+  // Don't render empty assistant messages (tool-only messages)
+  if (message.role === "assistant" && !message.content?.trim()) {
+    return null;
+  }
+
   const isUser = message.role === "user";
 
   return (
