@@ -10,8 +10,11 @@
  * Also handles GitHub App installation params that come with OAuth callback
  */
 
-import { NextRequest } from "next/server";
+import { cookies } from "next/headers";
+import { NextRequest, NextResponse } from "next/server";
 import { handlers } from "@/lib/auth";
+import { auth } from "@/lib/auth";
+import { processInstallation } from "@/lib/github/installation";
 
 const { GET: nextAuthGet, POST } = handlers;
 
@@ -23,26 +26,36 @@ async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const installationId = url.searchParams.get("installation_id");
   const setupAction = url.searchParams.get("setup_action");
+  const isGitHubCallback = url.pathname.includes("/callback/github");
 
-  // Process the normal auth flow first
-  const response = await nextAuthGet(request);
+  // If this is an installation update and user is already logged in,
+  // process it directly without going through OAuth (which would fail PKCE)
+  if (isGitHubCallback && installationId && setupAction) {
+    const session = await auth();
 
-  // If this is a GitHub callback with installation params, process them
-  // We do this after auth so we have a session
-  if (
-    url.pathname.includes("/callback/github") &&
-    installationId &&
-    setupAction
-  ) {
-    // Store installation params in a cookie for processing after redirect
-    // The actual processing happens in middleware or the redirect target
-    response.headers.set(
-      "Set-Cookie",
-      `pending_installation=${installationId}:${setupAction}; Path=/; HttpOnly; SameSite=Lax; Max-Age=60`
-    );
+    if (session?.user?.id) {
+      // User is already logged in - process installation directly
+      console.log(`[Auth] Processing installation ${installationId} for logged-in user ${session.user.id}`);
+      await processInstallation(session.user.id, parseInt(installationId, 10), setupAction);
+
+      // Redirect to home with success message
+      const redirectUrl = new URL("/", request.url);
+      redirectUrl.searchParams.set("message", `GitHub App ${setupAction}d successfully`);
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    // User not logged in - store installation for after OAuth completes
+    const cookieStore = await cookies();
+    cookieStore.set("pending_installation", `${installationId}:${setupAction}`, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: 60,
+    });
   }
 
-  return response;
+  // Process the normal auth flow
+  return nextAuthGet(request);
 }
 
 export { GET, POST };
