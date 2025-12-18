@@ -1,5 +1,10 @@
 /**
  * Judge runner - evaluates gladiator outputs and synthesizes verdict
+ *
+ * Now runs inside the trial container with repo access so judges can:
+ * - Run tests to verify gladiator claims
+ * - Inspect actual code changes
+ * - Provide evidence-based evaluations
  */
 
 import { eq } from "drizzle-orm";
@@ -9,8 +14,10 @@ import {
   type CostInfo,
   type JudgeOutput,
   JudgeOutputSchema,
+  runStructuredAgentInContainerWithRetry,
   runStructuredAgentWithRetry,
 } from "../../claude/index";
+import type { TrialContainer } from "../../docker/container";
 import { transitionTrialState } from "../state";
 import type { StatusCallback } from "../types";
 import { buildJudgeSystemPrompt, buildJudgeUserPrompt } from "./prompts";
@@ -56,9 +63,11 @@ async function runSingleJudge(
     id: string;
     name: string;
     responseContent: string;
+    branchName?: string;
   }>,
   oauthToken: string,
   onStatus?: StatusCallback,
+  container?: TrialContainer,
 ): Promise<{ judgeId: string; output: JudgeOutput; cost: CostInfo }> {
   try {
     // Notify that judge is thinking
@@ -81,20 +90,34 @@ async function runSingleJudge(
     const systemPrompt = buildJudgeSystemPrompt(judge.name, judge.focus, evaluationCriteria);
     const userPrompt = buildJudgeUserPrompt(challenge, gladiatorOutputs);
 
-    // Run the judge with structured output
-    const result = await runStructuredAgentWithRetry(
-      userPrompt,
-      JudgeOutputSchema,
-      {
-        model: judge.model,
-        allowedTools: [], // Judges don't need tools, just reasoning
-        maxTurns: 5, // Allow a few turns for structured output
-        systemPrompt,
-        permissionMode: "bypassPermissions",
-      },
-      2, // Max 2 retries for validation failures
-      oauthToken,
-    );
+    // Run the judge - in container if available (code battles), otherwise host-based
+    const result = container
+      ? await runStructuredAgentInContainerWithRetry(
+          container,
+          userPrompt,
+          JudgeOutputSchema,
+          {
+            model: judge.model === "opus" ? "opus" : "sonnet",
+            tools: ["Read", "Bash", "Glob", "Grep"], // Can run tests, inspect code
+            maxTurns: 25,
+            systemPrompt,
+          },
+          2,
+          oauthToken,
+        )
+      : await runStructuredAgentWithRetry(
+          userPrompt,
+          JudgeOutputSchema,
+          {
+            model: judge.model,
+            allowedTools: [], // No tools for non-code-battle trials
+            maxTurns: 5,
+            systemPrompt,
+            permissionMode: "bypassPermissions",
+          },
+          2,
+          oauthToken,
+        );
 
     if (!result.success || !result.data) {
       throw new Error(`Judge ${judge.name} failed: ${result.error || "No data returned"}`);
@@ -288,6 +311,7 @@ ${winnerName} achieved the highest average score of ${highestScore.toFixed(1)}/1
  * @param gladiatorRecords - Successful gladiator records with outputs
  * @param oauthToken - Claude OAuth token for API calls
  * @param onStatus - Optional callback for status updates (for SSE)
+ * @param container - Optional trial container with repo access (for code battles)
  */
 export async function runJudges(
   trialId: string,
@@ -295,6 +319,7 @@ export async function runJudges(
   gladiatorRecords: GladiatorRecord[],
   oauthToken: string,
   onStatus?: StatusCallback,
+  container?: TrialContainer,
 ): Promise<void> {
   try {
     // Fetch the trial
@@ -306,16 +331,24 @@ export async function runJudges(
       throw new Error(`Trial not found: ${trialId}`);
     }
 
-    // Prepare gladiator outputs for judges
+    // Prepare gladiator outputs for judges (include branch names for git diff)
     const gladiatorOutputs = gladiatorRecords.map((g) => ({
       id: g.id,
       name: g.name,
       responseContent: g.responseContent || "",
+      branchName: g.branchName,
     }));
 
     // Run all judges in parallel
     const judgePromises = judgeRecords.map((judge) =>
-      runSingleJudge(judge, trial.challengePrompt, gladiatorOutputs, oauthToken, onStatus),
+      runSingleJudge(
+        judge,
+        trial.challengePrompt,
+        gladiatorOutputs,
+        oauthToken,
+        onStatus,
+        container,
+      ),
     );
 
     const judgeResults = await Promise.all(judgePromises);

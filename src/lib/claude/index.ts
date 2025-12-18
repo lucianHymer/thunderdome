@@ -52,7 +52,10 @@ export {
 } from "./schemas";
 // Structured output with Zod
 export {
+  type ContainerAgentConfig,
   runStructuredAgent,
+  runStructuredAgentInContainer,
+  runStructuredAgentInContainerWithRetry,
   runStructuredAgentWithRetry,
 } from "./structured";
 // Type exports

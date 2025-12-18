@@ -3,6 +3,8 @@
  */
 
 import { z } from "zod";
+import type { AgentEvent, Model } from "@/lib/docker/agent-client";
+import type { TrialContainer } from "@/lib/docker/container";
 import { runAgent } from "./agent";
 import type { AgentConfig, StreamEvent, StructuredResult } from "./types";
 
@@ -171,7 +173,6 @@ Provide your response as a JSON object. You can wrap it in a markdown code block
     }
 
     const resultContent = finalEvent.content as any;
-    console.log("[Structured] Result content:", JSON.stringify(resultContent, null, 2));
 
     const cost = {
       totalUsd: resultContent.total_cost_usd || 0,
@@ -289,6 +290,201 @@ Please try again, ensuring your response is valid JSON matching the schema exact
 
       // Use the retry prompt for next iteration
       prompt = retryPrompt;
+    }
+  }
+
+  return {
+    ...lastResult!,
+    retries: attempts - 1,
+  };
+}
+
+/**
+ * Container-based structured agent configuration
+ */
+export interface ContainerAgentConfig {
+  model?: Model;
+  systemPrompt?: string;
+  tools?: string[];
+  cwd?: string;
+  maxTurns?: number;
+}
+
+/**
+ * Runs a structured agent inside a Docker container via the agent server.
+ * This allows the agent to have access to the repository for verification.
+ *
+ * @param container - The trial container with agent server
+ * @param prompt - The prompt to send to the agent
+ * @param zodSchema - Zod schema to validate the output against
+ * @param config - Container agent configuration
+ * @param oauthToken - OAuth token for authentication
+ * @param onEvent - Optional callback for streaming events
+ * @returns StructuredResult with parsed and validated data
+ */
+export async function runStructuredAgentInContainer<T extends z.ZodType>(
+  container: TrialContainer,
+  prompt: string,
+  zodSchema: T,
+  config: ContainerAgentConfig = {},
+  oauthToken: string,
+  onEvent?: (event: AgentEvent) => void,
+): Promise<StructuredResult<z.infer<T>>> {
+  const agentClient = container.getAgentClient();
+
+  // Convert Zod schema to JSON Schema
+  const jsonSchema = zodToJsonSchema(zodSchema);
+
+  // Add structured output instruction to the prompt
+  const structuredPrompt = `${prompt}
+
+IMPORTANT: You must respond with valid JSON matching this exact schema:
+${JSON.stringify(jsonSchema, null, 2)}
+
+After completing your analysis, provide your final response as a JSON object wrapped in a markdown code block. Make sure the JSON is valid and matches the schema exactly.`;
+
+  try {
+    // Create session on the agent server
+    const session = await agentClient.createSession({
+      model: config.model || "opus",
+      systemPrompt: config.systemPrompt,
+      tools: config.tools || [],
+      cwd: config.cwd || "/workspace/repo",
+      maxTurns: config.maxTurns || 25,
+      oauthToken,
+    });
+
+    // Collect assistant text for parsing
+    let fullOutput = "";
+
+    // Send message and stream response
+    const result = await agentClient.sendMessage(
+      session.sessionId,
+      structuredPrompt,
+      oauthToken,
+      async (event: AgentEvent) => {
+        // Forward event to caller
+        if (onEvent) {
+          onEvent(event);
+        }
+
+        // Collect assistant text
+        if (event.event === "assistant") {
+          const data = event.data as { content?: string };
+          if (data.content) {
+            fullOutput += data.content;
+          }
+        }
+      },
+    );
+
+    // End the session
+    await agentClient.endSession(session.sessionId);
+
+    const cost = {
+      totalUsd: result.cost.totalUsd,
+      inputTokens: result.cost.inputTokens,
+      outputTokens: result.cost.outputTokens,
+    };
+
+    if (!result.success) {
+      return {
+        success: false,
+        cost,
+        error: result.error || "Agent execution failed",
+        rawContent: fullOutput,
+      };
+    }
+
+    // Extract and parse JSON from the result
+    const jsonText = extractJson(fullOutput);
+    let parsed: unknown;
+
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (parseError) {
+      return {
+        success: false,
+        cost,
+        error: `Failed to parse JSON: ${parseError instanceof Error ? parseError.message : "Unknown error"}`,
+        rawContent: fullOutput,
+      };
+    }
+
+    // Validate against Zod schema
+    const validation = zodSchema.safeParse(parsed);
+
+    if (!validation.success) {
+      return {
+        success: false,
+        cost,
+        error: `Schema validation failed: ${validation.error.message}`,
+        rawContent: fullOutput,
+      };
+    }
+
+    return {
+      success: true,
+      data: validation.data,
+      cost,
+      rawContent: fullOutput,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      cost: {
+        totalUsd: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Runs a container-based structured agent with retry logic
+ */
+export async function runStructuredAgentInContainerWithRetry<T extends z.ZodType>(
+  container: TrialContainer,
+  prompt: string,
+  zodSchema: T,
+  config: ContainerAgentConfig = {},
+  maxRetries: number = 2,
+  oauthToken: string,
+  onEvent?: (event: AgentEvent) => void,
+): Promise<StructuredResult<z.infer<T>>> {
+  let lastResult: StructuredResult<z.infer<T>> | undefined;
+  let attempts = 0;
+  let currentPrompt = prompt;
+
+  while (attempts <= maxRetries) {
+    const result = await runStructuredAgentInContainer(
+      container,
+      currentPrompt,
+      zodSchema,
+      config,
+      oauthToken,
+      onEvent,
+    );
+
+    if (result.success) {
+      return {
+        ...result,
+        retries: attempts,
+      };
+    }
+
+    lastResult = result;
+    attempts++;
+
+    // If we have retries left, try again with error feedback
+    if (attempts <= maxRetries) {
+      currentPrompt = `${prompt}
+
+PREVIOUS ATTEMPT FAILED: ${result.error}
+
+Please try again, ensuring your response is valid JSON matching the schema exactly.`;
     }
   }
 

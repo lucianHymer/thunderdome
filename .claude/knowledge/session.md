@@ -1100,3 +1100,256 @@ Note: Code Battle and Docker integration are designed but not fully operational.
 **Files**: packages/agent-server/src/server.ts, src/lib/docker/agent-client.ts, src/lib/docker/container.ts, src/lib/trial/code-battle/orchestrator.ts
 ---
 
+### [05:11] [architecture] Container Architecture for Code Battles - Current Implementation Status
+**Details**: The container architecture for code battles has been substantially implemented with the following components:
+
+**Agent Server (packages/agent-server/)**
+- Hono-based HTTP server running inside Docker containers
+- Manages multiple concurrent Claude agent sessions via SSE streaming
+- API endpoints: /health, /sessions (POST/GET/DELETE), /sessions/:id/message (POST)
+- Session management with 30-minute timeout and inactivity cleanup
+- Resume capability via claudeSessionId storage
+- Uses Claude Agent SDK with bypassPermissions mode for read-only tools
+
+**Container Management (src/lib/docker/)**
+- Docker client with singleton pattern
+- Trial container creation with resource limits (2GB memory, 1 CPU default)
+- Security settings: no-new-privileges, drop all capabilities (add back CHOWN, DAC_OVERRIDE, etc)
+- 30-minute container timeout with auto-cleanup
+- Container exec() support for running git/shell commands
+- Health check via /health endpoint with polling
+
+**Git Authentication (src/lib/git/worktree.ts)**
+- OAuth token passed as x-access-token in git URL
+- Git identity configured: gladiator@thunderdome.app / Thunderdome Gladiator
+- Worktree support for isolated gladiator branches
+- Branch naming: thunderdome/trial-{id}/{gladiator-slug}
+- Push with --force-with-lease for safe force updates
+
+**Code Battle Orchestrator (src/lib/trial/code-battle/)**
+- Full lifecycle: start container → clone repo → setup → run gladiators → push branches → cleanup
+- Phases: container_status, setup_output, battle_start, battle_complete, error
+- Gladiators run in parallel, each with own git worktree
+- Reads FINDINGS.md from each gladiator submission
+- Streaming events to WebSocket subscribers via broadcastTrialUpdate
+
+**Trial State Machine (src/lib/trial/state.ts)**
+- State flow: pending → lanista_designing → battling → arbiter_designing → judging → decree → complete
+- Failed state can recover to any earlier state
+- Database persistence with phase column (maps to TrialStatus)
+
+**Gladiator Execution (src/lib/trial/code-battle/gladiators.ts)**
+- Creates individual sessions on agent server for each gladiator
+- System prompt includes: challenge, persona, findings requirement, repo context, working directory
+- Tools parsed from JSON array (likely MCP tools)
+- Model normalization: opus/sonnet/haiku
+- Max 25 turns per gladiator
+- Streams all events (assistant, tool_use, tool_result) to subscribers
+- Commits changes with 'git add -A && git commit'
+**Files**: packages/agent-server/src/server.ts, packages/agent-server/src/sessions.ts, packages/agent-server/src/claude.ts, src/lib/docker/container.ts, src/lib/docker/agent-client.ts, src/lib/git/worktree.ts, src/lib/trial/code-battle/orchestrator.ts, src/lib/trial/code-battle/gladiators.ts, src/lib/trial/state.ts
+---
+
+### [05:15] [architecture] GitHub App Authentication and Installation Token System
+**Details**: The project has a complete GitHub App OAuth authentication system with installation token generation for git operations:
+
+KEY COMPONENTS:
+1. GitHub App Credentials: Uses GITHUB_APP_CLIENT_ID (starts with Iv1.* or Iv23.*), GITHUB_APP_CLIENT_SECRET, and GITHUB_APP_PRIVATE_KEY (base64 encoded)
+2. Octokit Library: Uses App from 'octokit' package for managing GitHub App authentication
+3. Installation Token Generation: getInstallationToken() function in src/lib/github/app.ts generates short-lived tokens (1 hour expiry)
+
+AUTHENTICATION FLOW:
+- NextAuth.js v5 uses GitHub App client credentials for OAuth login
+- Installation tokens are separate from login tokens - they're generated per-installation for repo access
+- Tokens are generated with getInstallationToken(installationId, [repoNames]) and expire after 1 hour
+- Git operations use x-access-token:TOKEN@github.com format for authenticated URLs
+
+DATABASE TABLES:
+- github_app_installations: Stores which users have installed the app and for which accounts
+- github_app_repos: Caches accessible repositories per installation
+
+CURRENT GIT AUTH USAGE (worktree.ts):
+- cloneRepo(): Uses x-access-token with provided token in URL construction
+- pushWorktree(): Uses x-access-token with provided token in URL construction
+- Token is passed as parameter to these functions, not generated internally
+
+APP TOKEN GENERATION ALREADY EXISTS:
+- getInstallationToken(installationId, repositories?): Generates installation access token
+- getRepoToken(repoFullName, userId): Convenience function that finds installation and generates scoped token
+- Called from: /api/repos/[owner]/[repo]/setup/route.ts (line 361) for cloning repos
+
+INTEGRATION POINTS:
+- Setup discovery API uses getInstallationToken to clone repos during discovery
+- Code battle orchestrator receives token as parameter to cloneRepository()
+- Installation is processed during OAuth callback via processInstallation() event handler
+**Files**: src/lib/github/app.ts, src/lib/github/installation.ts, src/lib/auth.ts, src/lib/git/worktree.ts, src/app/api/auth/[...nextauth]/route.ts, src/app/api/repos/[owner]/[repo]/setup/route.ts, src/db/schema.ts, migrations/001_github_app_tables.sql
+---
+
+### [05:21] [architecture] Arbiter and Judges System Architecture
+**Details**: The Thunderdome system uses a sophisticated evaluation architecture:
+
+ARBITER PHASE:
+- The Arbiter is a strategic AI that SEES gladiator outputs BEFORE designing judges (evidence-based evaluation)
+- Uses Claude Opus for strong analytical reasoning
+- Runs after gladiators complete but before judges evaluate
+- Analyzes what gladiators actually produced to design 1-5 specialized judges
+- Creates judges with name, focus area, and 1-10 specific evaluation criteria
+- Stores arbiterPlan in trials.arbiterPlan as JSON with: reasoning, judges array, and cost
+- Can reuse existing judges on trial resume (avoids re-creating judges)
+
+JUDGES PHASE:
+- Each judge evaluates ALL gladiators independently using Claude Opus (or configured model)
+- Judges are SPECIALIZED - each focuses on a different quality dimension
+- Runs in parallel: all judges evaluate simultaneously
+- Each judge produces structured output with: evaluations (score + strengths/weaknesses/reasoning), ranking, and summary
+- Stores full evaluation in judges.evaluation as JSON (includes criteria, output, cost)
+
+VERDICT SYNTHESIS:
+- Calculates average score for each gladiator across all judges
+- Winner is highest average score
+- Stores verdict in verdicts table with: summary, winnerGladiatorId, reasoning
+- Verdict includes final scores, judge perspectives, and detailed reasoning
+- Can reuse existing verdict on resume (avoids re-synthesis)
+
+STATE MACHINE:
+- pending → lanista_designing → battling → arbiter_designing → judging → decree → complete
+- Arbiter transition happens after gladiators complete
+- Judges transition happens after arbiter designs judges
+- Verdict synthesis happens automatically after all judges complete
+- Fails can recover to earlier states for resume
+
+STORAGE:
+- Trial: challengePrompt, arbiterPlan (JSON), status, phase
+- Gladiators: id, name, responseContent (final output), branchName (git branch for code battles)
+- Judges: id, name, focus, model, evaluation (JSON with criteria+output+cost)
+- Verdicts: summary, winnerGladiatorId, reasoning
+
+ORCHESTRATION:
+- Code battles: run gladiators in container → push branches → transition to arbiter_designing → runArbiter
+- Standard trials: Lanista → Gladiators → runArbiter (which internally calls runJudges)
+- Arbiter.runArbiter() calls Judges.runJudges() at the end, which synthesizes verdict and transitions to decree
+**Files**: src/lib/trial/arbiter/index.ts, src/lib/trial/arbiter/prompts.ts, src/lib/trial/judges/index.ts, src/lib/trial/judges/prompts.ts, src/db/schema.ts, src/lib/claude/schemas.ts, src/lib/trial/state.ts, src/lib/trial/code-battle/orchestrator.ts
+---
+
+### [05:23] [architecture] Consul Implementation Architecture
+**Details**: The Consul is the post-verdict advisor that operates in the "decree" phase of the trial lifecycle. It's currently implemented as a frontend chat component that communicates with a backend API endpoint, but needs to migrate to run inside the container like gladiators and judges.
+
+CURRENT ARCHITECTURE (HOST-BASED):
+- Frontend: ConsulDialog component (/src/components/trials/consul-dialog.tsx) opens interactive modal
+- API: POST /api/trials/:id/consul (src/app/api/trials/[id]/consul/route.ts)
+- Uses runAgent() with Claude SDK to stream responses
+- Stores conversations in decrees table (actionType: MERGE, CLOSE_PR, CREATE_ISSUE, COMMENT)
+- No tools currently enabled (allowedTools: [])
+
+PROMPTS & CONTEXT (src/lib/trial/consul/prompts.ts):
+1. buildConsulSystemPrompt() - Describes Consul role, available actions, communication style
+2. buildConsulContext() - Assembles full trial context (challenge, verdict, gladiator responses, judge evaluations)
+3. buildConsulGreeting() - Initial greeting message
+
+AVAILABLE ACTIONS (per database schema):
+- MERGE: Merge winner's branch to main
+- CREATE_PR: Create pull request with changes
+- COMMENT: Store conversation history
+- CLOSE_PR: (placeholder for future)
+- CREATE_ISSUE: (placeholder for future)
+- SYNTHESIZE: Combine best elements from multiple branches (mentioned in prompts but not yet implemented)
+
+FLOW IN UI:
+1. User clicks "Consul" button when trial is COMPLETED
+2. ConsulDialog opens with verdict summary
+3. Quick action buttons: "Merge Winner", "Create PR", "Synthesize"
+4. User sends message via input
+5. API streams response from Claude
+6. Each exchange stored in decrees table with consulConversation JSON array
+
+WHAT NEEDS TO MIGRATE TO CONTAINER:
+- Consul needs git/GitHub access via tools inside container
+- Should use agent server just like gladiators (POST /sessions)
+- Container already has /workspace/repo with all branches pushed
+- Needs: Read, Bash, Glob, Grep tools for branch review + git/gh commands
+- Should handle merge/PR creation via git commands inside container
+**Files**: src/lib/trial/consul/prompts.ts, src/app/api/trials/[id]/consul/route.ts, src/components/trials/consul-dialog.tsx, src/db/schema.ts (decrees table), docs/container-architecture.md
+---
+
+### [05:27] [architecture] Container-based code battle orchestration
+**Details**: The code battle system now uses Docker containers with an agent server for all AI operations:
+
+1. **GitHub App Auth**: Uses installation tokens (not user OAuth) for git operations. Token is generated via `getInstallationToken()` and embedded in clone URLs using `x-access-token:TOKEN@github.com` format. Commits are made as the app (gladiator@thunderdome.app).
+
+2. **Orchestrator Flow** (src/lib/trial/code-battle/orchestrator.ts):
+   - Get GitHub App token via `checkRepoAccess()` + `getInstallationToken()`
+   - Start container, wait for agent server health
+   - Clone repo with authenticated URL
+   - Run setup discovery in container if no setup.sh exists
+   - Execute setup.sh
+   - Run gladiators in parallel (each in own worktree)
+   - Push branches to GitHub
+   - Run Arbiter → Judges → Verdict pipeline
+   - Destroy container (Consul runs separately)
+
+3. **Setup Discovery** (src/lib/setup/discovery.ts):
+   - `runSetupDiscoveryInContainer()` uses agent server session with Opus
+   - Tools: Read, Glob, Grep, Bash
+   - Parses output for setup.md and setup.sh code blocks
+   - `writeSetupFilesToContainer()` writes files to .thunderdome/
+
+4. **Consul** (src/lib/trial/consul/runner.ts):
+   - Spins up its own container when user invokes it post-verdict
+   - Has git tools (Read, Bash, Glob, Grep) for merge/PR actions
+   - Sessions tracked in memory with 10-min idle timeout
+   - Clones repo fresh (branches exist on GitHub from gladiators)
+
+5. **Arbiter/Judges** run on host (no container) - they just evaluate gladiator outputs from DB, don't need repo access.
+**Files**: src/lib/trial/code-battle/orchestrator.ts, src/lib/setup/discovery.ts, src/lib/trial/consul/runner.ts, src/lib/github/app.ts
+---
+
+### [12:00] [architecture] Container agent execution - single unified approach
+**Details**: ALL agents in containers are interactive - they use tools, explore, run commands, etc. The difference is NOT interactive vs non-interactive.
+
+The ONLY real difference:
+- **Single prompt agents** (Setup Discovery, Gladiators, Arbiter, Judges): One user message → agent works autonomously with tools → finishes
+- **Multi-turn conversation** (Consul): User sends message → agent responds → user sends another → etc.
+
+DON'T create separate functions for each agent type. Just use the AgentServerClient directly:
+- `agentClient.createSession({ model, systemPrompt, tools, cwd, oauthToken })`
+- `agentClient.sendMessage(sessionId, prompt, token, onEvent)`
+- `agentClient.endSession(sessionId)`
+
+For structured output (Arbiter, Judges): 
+- Add JSON schema instructions to the prompt
+- Parse JSON from the collected response text
+- Validate with Zod
+
+This is ONE pattern, not multiple wrapper functions. The gladiator runner already does this correctly - just follow that pattern for everything else.
+**Files**: src/lib/docker/agent-client.ts, src/lib/trial/code-battle/gladiators.ts
+---
+
+### [13:10] [architecture] Arbiter and Judges now run in container with repo access
+**Details**: Updated the Arbiter and Judges to run inside the trial container with full repo access:
+
+**Arbiter** (src/lib/trial/arbiter/index.ts):
+- Now accepts `container: TrialContainer` parameter
+- Uses `runStructuredAgentInContainerWithRetry` instead of host-based agent
+- Has tools: Read, Bash, Glob, Grep
+- Can run `git diff main...branch` to see actual code changes
+- Can run tests to verify gladiator claims
+- System prompt updated to explain capabilities
+
+**Judges** (src/lib/trial/judges/index.ts):
+- Now accepts `container: TrialContainer` parameter  
+- Uses `runStructuredAgentInContainerWithRetry`
+- Has tools: Read, Bash, Glob, Grep
+- User prompt includes branch names for each gladiator
+- Judges can verify claims by running tests, checking diffs
+- Prompt emphasizes "Don't trust - verify!"
+
+**Container Lifecycle**:
+- Container stays alive after gladiator phase for Arbiter/Judges
+- Container NOT destroyed after verdict - stays alive for Consul
+- Consul reuses existing container if healthy, or spins up fresh if timed out
+- Container cleanup happens: on error, by Consul decree, idle timeout, or user cancel
+
+**Flow**:
+Gladiators → [container stays] → Arbiter → Judges → Verdict → [container stays] → Consul
+**Files**: src/lib/trial/arbiter/index.ts, src/lib/trial/judges/index.ts, src/lib/trial/code-battle/orchestrator.ts, src/lib/trial/consul/runner.ts
+---
+

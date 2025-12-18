@@ -22,6 +22,22 @@ Your job is to evaluate gladiator outputs based on your specific area of experti
 
 You must provide fair, objective evaluations that help identify the best solution. You will evaluate ALL successful gladiators and provide scores, strengths, weaknesses, and detailed reasoning for each.
 
+# YOUR CAPABILITIES
+
+You have access to the repository where gladiators made their changes:
+- **Read**: Read any file to inspect code changes
+- **Glob**: Find files by pattern
+- **Grep**: Search for patterns in code
+- **Bash**: Run commands like \`git diff\`, run tests, check builds
+
+Use these tools to VERIFY gladiator claims:
+- Run \`git diff main...<branch>\` to see actual code changes
+- Run tests: \`npm test\`, \`pytest\`, etc.
+- Check if the code compiles/builds
+- Verify that claimed improvements actually exist
+
+**Don't just trust FINDINGS.md - verify the claims!**
+
 # YOUR EVALUATION CRITERIA
 
 You will evaluate gladiators based on these specific criteria:
@@ -30,11 +46,12 @@ ${criteriaList}
 
 # EVALUATION GUIDELINES
 
-1. **Be Objective**: Base your evaluation on observable evidence in the outputs
+1. **Be Objective**: Base your evaluation on observable evidence - run tests, check diffs
 2. **Be Specific**: Point to concrete examples when identifying strengths and weaknesses
 3. **Be Fair**: Don't favor any particular style or approach unless it genuinely affects quality
 4. **Be Consistent**: Apply the same standards to all gladiators
 5. **Be Thorough**: Consider all aspects of your evaluation criteria
+6. **Verify Claims**: Don't trust - verify! Run tests, check code, validate claims
 
 # SCORING SCALE
 
@@ -83,20 +100,35 @@ export function buildJudgeUserPrompt(
     id: string;
     name: string;
     responseContent: string;
+    branchName?: string;
   }>,
 ): string {
+  const hasCodeBattle = gladiatorOutputs.some((g) => g.branchName);
+
   const outputsSection = gladiatorOutputs
-    .map(
-      (g, idx) => `## Gladiator ${idx + 1}: ${g.name}
+    .map((g, idx) => {
+      const branchInfo = g.branchName
+        ? `**Branch**: \`${g.branchName}\`
+**View changes**: \`git diff main...${g.branchName}\`
+
+`
+        : "";
+
+      return `## Gladiator ${idx + 1}: ${g.name}
 
 **ID**: ${g.id}
-
-**Output**:
+${branchInfo}**Output**:
 ${g.responseContent}
 
----`,
-    )
+---`;
+    })
     .join("\n\n");
+
+  const codeBattleInstructions = hasCodeBattle
+    ? `
+**IMPORTANT**: Each gladiator has a branch with their code changes. Use \`git diff main...<branch>\` to see actual changes, and run tests to verify their claims.
+`
+    : "";
 
   return `# THE CHALLENGE
 
@@ -105,6 +137,7 @@ ${challenge}
 # GLADIATOR OUTPUTS TO EVALUATE
 
 You must evaluate each of the following ${gladiatorOutputs.length} gladiator(s) based on your specific evaluation criteria.
+${codeBattleInstructions}
 
 ${outputsSection}
 
@@ -112,12 +145,13 @@ ${outputsSection}
 
 Evaluate each gladiator's output according to your role and criteria:
 
-1. **Score each gladiator** (0-100) based on how well they meet your evaluation criteria
-2. **Identify specific strengths** - What did they do well? Provide concrete examples
-3. **Identify specific weaknesses** - Where did they fall short? Provide concrete examples
-4. **Explain your reasoning** - Why did you assign this score? Reference your criteria and specific evidence
-5. **Rank the gladiators** - Order them from best to worst according to your evaluation
-6. **Provide a summary** - What patterns did you observe? Why did the top performer(s) excel?
+1. **Verify claims** - Use git diff and run tests to check if their claims are accurate
+2. **Score each gladiator** (0-100) based on how well they meet your evaluation criteria
+3. **Identify specific strengths** - What did they do well? Provide concrete examples from the CODE
+4. **Identify specific weaknesses** - Where did they fall short? Provide concrete examples
+5. **Explain your reasoning** - Why did you assign this score? Reference your criteria and specific evidence
+6. **Rank the gladiators** - Order them from best to worst according to your evaluation
+7. **Provide a summary** - What patterns did you observe? Why did the top performer(s) excel?
 
 Remember: You are evaluating from your specific perspective defined by your focus area. Other judges may have different perspectives, and that's expected. Your job is to provide an expert evaluation in YOUR domain.`;
 }

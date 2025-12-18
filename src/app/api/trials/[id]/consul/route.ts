@@ -2,21 +2,18 @@
  * Consul API Endpoint
  *
  * POST /api/trials/:id/consul - Stream Consul conversation responses
+ * Uses container-based Consul with git tools for code battle trials.
  */
 
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { decrees, gladiators, judges, trials, users, verdicts } from "@/db/schema";
-import { runAgent } from "@/lib/claude/agent";
 import { decrypt } from "@/lib/encryption";
 import { requireUser } from "@/lib/session";
 import { createWordStreamResponse, streamTextToSSE } from "@/lib/streaming";
-import {
-  buildConsulContext,
-  buildConsulGreeting,
-  buildConsulSystemPrompt,
-} from "@/lib/trial/consul/prompts";
+import { buildConsulGreeting } from "@/lib/trial/consul/prompts";
+import { sendConsulMessage } from "@/lib/trial/consul/runner";
 
 interface Message {
   role: "user" | "consul";
@@ -65,7 +62,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "No verdict found for this trial" }, { status: 400 });
     }
 
-    // Build context
+    // Build context for Consul
     const context = {
       trial: {
         id: trial.id,
@@ -73,13 +70,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         repoUrl: trial.repoUrl,
         trialType: trial.trialType,
       },
-      gladiators: trialGladiators,
-      judges: trialJudges,
-      verdict,
+      gladiators: trialGladiators.map((g) => ({
+        id: g.id,
+        name: g.name,
+        persona: g.persona,
+        responseContent: g.responseContent,
+        branchName: g.branchName || "",
+      })),
+      judges: trialJudges.map((j) => ({
+        id: j.id,
+        name: j.name,
+        focus: j.focus,
+        evaluation: j.evaluation,
+      })),
+      verdict: {
+        summary: verdict.summary,
+        winnerGladiatorId: verdict.winnerGladiatorId,
+        reasoning: verdict.reasoning,
+      },
     };
-
-    const systemPrompt = buildConsulSystemPrompt(context);
-    const trialContext = buildConsulContext(context);
 
     // Get user's Claude token
     const [dbUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
@@ -103,7 +112,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
     }
 
-    // Build conversation context for the prompt
+    // Build conversation context for the prompt (include history)
     let conversationPrompt = message;
     if (history.length > 0) {
       conversationPrompt = `${history
@@ -111,61 +120,56 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .join("\n\n")}\n\nUser: ${message}`;
     }
 
-    // Stream response using shared agent runner
+    // Stream response using container-based Consul with git tools
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
           let fullResponse = "";
 
-          // Use the shared runAgent which handles CLI path and auth token
-          const agentStream = runAgent(
+          const result = await sendConsulMessage(
+            trialId,
             conversationPrompt,
-            {
-              systemPrompt: `${systemPrompt}\n\n# Trial Context\n${trialContext}`,
-              model: "sonnet",
-              maxTurns: 5,
-              allowedTools: [], // No tools for Consul
-            },
+            context,
+            user.id,
             claudeToken,
+            async (event) => {
+              // Handle assistant messages - extract text and stream
+              if (event.event === "assistant") {
+                const data = event.data as { content?: string };
+                if (data.content) {
+                  fullResponse += data.content;
+                  // Re-chunk text word-by-word for smooth streaming display
+                  await streamTextToSSE(controller, encoder, data.content, 15);
+                }
+              }
+            },
           );
 
-          for await (const event of agentStream) {
-            // Handle assistant messages - extract text and re-chunk for smooth display
-            if (event.type === "assistant") {
-              const msg = event.content as any;
-              // The content is a message object with content array
-              const textContent = msg?.content?.find((c: any) => c.type === "text");
-              const text = textContent?.text;
-              if (text) {
-                fullResponse += text;
-                // Re-chunk text word-by-word for smooth streaming display
-                await streamTextToSSE(controller, encoder, text, 15);
-              }
-            } else if (event.type === "result") {
-              // Store the conversation in the decrees table
-              await db.insert(decrees).values({
-                trialId,
-                actionType: "COMMENT",
-                actionDetails: JSON.stringify({
-                  type: "consul_conversation",
-                  userMessage: message,
-                  consulResponse: fullResponse,
-                }),
-                consulConversation: JSON.stringify([
-                  ...history,
-                  { role: "user", content: message },
-                  { role: "consul", content: fullResponse },
-                ]),
-              });
-            }
+          if (!result.success) {
+            throw new Error(result.error || "Consul failed to respond");
           }
+
+          // Store the conversation in the decrees table
+          await db.insert(decrees).values({
+            trialId,
+            actionType: "COMMENT",
+            actionDetails: JSON.stringify({
+              type: "consul_conversation",
+              userMessage: message,
+              consulResponse: fullResponse,
+            }),
+            consulConversation: JSON.stringify([
+              ...history,
+              { role: "user", content: message },
+              { role: "consul", content: fullResponse },
+            ]),
+          });
 
           // Send completion signal
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
         } catch (error) {
-          console.error("[Consul API] Stream error:", error);
           const errorData = JSON.stringify({
             type: "error",
             message: error instanceof Error ? error.message : "Failed to get response from Consul",
@@ -184,7 +188,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
     });
   } catch (error) {
-    console.error("[Consul API] Request error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to process request" },
       { status: 500 },

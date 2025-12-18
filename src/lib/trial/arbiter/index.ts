@@ -1,5 +1,10 @@
 /**
  * Arbiter runner - designs judges based on gladiator outputs
+ *
+ * Now runs inside the trial container with repo access so it can:
+ * - Inspect actual code changes via git diff
+ * - Run tests to verify gladiator claims
+ * - Design more informed evaluation criteria
  */
 
 import { eq } from "drizzle-orm";
@@ -9,8 +14,10 @@ import {
   type ArbiterOutput,
   ArbiterOutputSchema,
   MODELS,
+  runStructuredAgentInContainerWithRetry,
   runStructuredAgentWithRetry,
 } from "../../claude/index";
+import type { TrialContainer } from "../../docker/container";
 import { transitionTrialState } from "../state";
 import type { StatusCallback } from "../types";
 import { ARBITER_SYSTEM_PROMPT, buildArbiterUserPrompt } from "./prompts";
@@ -21,12 +28,14 @@ import { ARBITER_SYSTEM_PROMPT, buildArbiterUserPrompt } from "./prompts";
  * @param trialId - ID of the trial to design judges for
  * @param oauthToken - Claude OAuth token for API calls
  * @param onStatus - Optional callback for status updates (for SSE)
+ * @param container - Optional trial container with repo access (for code battles)
  * @returns The Arbiter's output
  */
 export async function runArbiter(
   trialId: string,
   oauthToken: string,
   onStatus?: StatusCallback,
+  container?: TrialContainer,
 ): Promise<ArbiterOutput> {
   try {
     // Fetch the trial
@@ -83,20 +92,34 @@ export async function runArbiter(
       })),
     );
 
-    // Run the Arbiter with structured output
-    const result = await runStructuredAgentWithRetry(
-      userPrompt,
-      ArbiterOutputSchema,
-      {
-        model: MODELS.OPUS, // Use Opus for the Arbiter - needs strong analytical reasoning
-        allowedTools: [], // Arbiter doesn't need tools, just reasoning
-        maxTurns: 5, // Allow a few turns for structured output
-        systemPrompt: ARBITER_SYSTEM_PROMPT,
-        permissionMode: "bypassPermissions",
-      },
-      2, // Max 2 retries for validation failures
-      oauthToken,
-    );
+    // Run the Arbiter - in container if available (code battles), otherwise host-based
+    const result = container
+      ? await runStructuredAgentInContainerWithRetry(
+          container,
+          userPrompt,
+          ArbiterOutputSchema,
+          {
+            model: "opus",
+            tools: ["Read", "Bash", "Glob", "Grep"], // Can inspect code, run git diff, etc.
+            maxTurns: 25,
+            systemPrompt: ARBITER_SYSTEM_PROMPT,
+          },
+          2,
+          oauthToken,
+        )
+      : await runStructuredAgentWithRetry(
+          userPrompt,
+          ArbiterOutputSchema,
+          {
+            model: MODELS.OPUS,
+            allowedTools: [], // No tools for non-code-battle trials
+            maxTurns: 5,
+            systemPrompt: ARBITER_SYSTEM_PROMPT,
+            permissionMode: "bypassPermissions",
+          },
+          2,
+          oauthToken,
+        );
 
     if (!result.success || !result.data) {
       throw new Error(`Arbiter failed: ${result.error || "No data returned"}`);
@@ -195,7 +218,7 @@ export async function runArbiter(
     });
 
     // Run judges (this will handle verdict synthesis and state transitions)
-    await runJudges(trialId, insertedJudges, successfulGladiators, oauthToken, onStatus);
+    await runJudges(trialId, insertedJudges, successfulGladiators, oauthToken, onStatus, container);
 
     return arbiterOutput;
   } catch (error) {
