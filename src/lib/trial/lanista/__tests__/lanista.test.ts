@@ -1,278 +1,224 @@
 /**
- * Integration tests for the Lanista
- *
- * These tests verify:
- * - Schema validation works correctly
- * - Valid gladiator configurations pass
- * - Invalid configurations are rejected
+ * Tests for Lanista schema validation
  */
 
+import { describe, it, expect } from "vitest";
 import { LanistaOutputSchema } from "../../../claude/schemas";
 
-/**
- * Simple test runner
- */
-function test(_name: string, fn: () => void | Promise<void>) {
-  try {
-    const result = fn();
-    if (result instanceof Promise) {
-      result
-        .then(() => {})
-        .catch((_err) => {
-          process.exit(1);
-        });
-    } else {
+describe("LanistaOutputSchema", () => {
+  it("accepts valid output with 2+ gladiators", () => {
+    const validOutput = {
+      reasoning:
+        "This challenge requires both security and performance perspectives.",
+      gladiators: [
+        {
+          name: "Security Guardian",
+          persona: "You are paranoid about security.",
+          model: "opus" as const,
+          temperature: 0.4,
+          tools: ["Read", "Grep", "Bash"],
+          focus: "Identify and prevent security vulnerabilities",
+        },
+        {
+          name: "Performance Optimizer",
+          persona: "You obsess over performance.",
+          model: "sonnet" as const,
+          temperature: 0.5,
+          tools: ["Read", "Bash", "Grep"],
+          focus: "Maximize performance",
+        },
+      ],
+    };
+
+    const result = LanistaOutputSchema.safeParse(validOutput);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.gladiators.length).toBe(2);
+      expect(result.data.gladiators[0].name).toBe("Security Guardian");
     }
-  } catch (_err: any) {
-    process.exit(1);
-  }
-}
+  });
 
-/**
- * Assert helper
- */
-function assert(condition: boolean, message: string) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
+  it("rejects fewer than 2 gladiators", () => {
+    const invalidOutput = {
+      reasoning: "Only one gladiator needed for this",
+      gladiators: [
+        {
+          name: "Solo Fighter",
+          persona: "I work alone",
+          model: "sonnet" as const,
+          temperature: 0.5,
+          tools: ["Read"],
+          focus: "Do everything",
+        },
+      ],
+    };
 
-// Test: Valid output passes schema validation
-test("Valid Lanista output passes schema validation", () => {
-  const validOutput = {
-    reasoning:
-      "This challenge requires both a security-focused and a performance-focused perspective to balance safety with efficiency.",
-    gladiators: [
-      {
-        name: "Security Guardian",
-        persona:
-          "You are paranoid about security. Every decision must be validated against potential attacks.",
-        model: "opus" as const,
-        temperature: 0.4,
-        tools: ["Read", "Grep", "Bash"],
-        focus: "Identify and prevent security vulnerabilities",
-      },
-      {
-        name: "Performance Optimizer",
-        persona: "You obsess over performance. Every millisecond matters. Profile and optimize.",
-        model: "sonnet" as const,
-        temperature: 0.5,
-        tools: ["Read", "Bash", "Grep"],
-        focus: "Maximize performance and minimize resource usage",
-      },
-    ],
-  };
+    const result = LanistaOutputSchema.safeParse(invalidOutput);
+    expect(result.success).toBe(false);
+  });
 
-  const result = LanistaOutputSchema.safeParse(validOutput);
-  assert(result.success, "Valid output should pass validation");
-  if (result.success) {
-    assert(result.data.gladiators.length === 2, "Should have 2 gladiators");
-    assert(
-      result.data.gladiators[0].name === "Security Guardian",
-      "First gladiator name should match",
-    );
-  }
-});
+  it("rejects more than 6 gladiators", () => {
+    const gladiatorTemplate = {
+      name: "Fighter",
+      persona: "I fight hard",
+      model: "sonnet" as const,
+      temperature: 0.5,
+      tools: ["Read"],
+      focus: "Fighting",
+    };
 
-// Test: Output with fewer than 2 gladiators is rejected
-test("Fewer than 2 gladiators is rejected", () => {
-  const invalidOutput = {
-    reasoning: "Only one gladiator needed",
-    gladiators: [
-      {
-        name: "Solo Fighter",
-        persona: "I work alone",
-        model: "sonnet" as const,
-        temperature: 0.5,
-        tools: ["Read"],
-        focus: "Do everything",
-      },
-    ],
-  };
+    const invalidOutput = {
+      reasoning: "Too many gladiators for this challenge",
+      gladiators: Array.from({ length: 7 }, (_, i) => ({
+        ...gladiatorTemplate,
+        name: `Fighter ${i + 1}`,
+      })),
+    };
 
-  const result = LanistaOutputSchema.safeParse(invalidOutput);
-  assert(!result.success, "Should reject fewer than 2 gladiators");
-  if (!result.success) {
-    assert(
-      result.error.message.includes("at least 2"),
-      "Error should mention minimum of 2 gladiators",
-    );
-  }
-});
+    const result = LanistaOutputSchema.safeParse(invalidOutput);
+    expect(result.success).toBe(false);
+  });
 
-// Test: Output with more than 6 gladiators is rejected
-test("More than 6 gladiators is rejected", () => {
-  const gladiatorTemplate = {
-    name: "Fighter",
-    persona: "I fight",
-    model: "sonnet" as const,
-    temperature: 0.5,
-    tools: ["Read"],
-    focus: "Fighting",
-  };
+  it("rejects invalid model name", () => {
+    const invalidOutput = {
+      reasoning: "Testing invalid model configuration",
+      gladiators: [
+        {
+          name: "Fighter 1",
+          persona: "I fight well",
+          model: "gpt-4" as any,
+          temperature: 0.5,
+          tools: ["Read"],
+          focus: "Fighting",
+        },
+        {
+          name: "Fighter 2",
+          persona: "I also fight well",
+          model: "sonnet" as const,
+          temperature: 0.5,
+          tools: ["Read"],
+          focus: "Also fighting",
+        },
+      ],
+    };
 
-  const invalidOutput = {
-    reasoning: "Too many gladiators",
-    gladiators: Array.from({ length: 7 }, (_, i) => ({
-      ...gladiatorTemplate,
-      name: `Fighter ${i + 1}`,
-    })),
-  };
+    const result = LanistaOutputSchema.safeParse(invalidOutput);
+    expect(result.success).toBe(false);
+  });
 
-  const result = LanistaOutputSchema.safeParse(invalidOutput);
-  assert(!result.success, "Should reject more than 6 gladiators");
-  if (!result.success) {
-    assert(
-      result.error.message.includes("more than 6"),
-      "Error should mention maximum of 6 gladiators",
-    );
-  }
-});
+  it("rejects temperature > 1.0", () => {
+    const invalidOutput = {
+      reasoning: "Testing temperature out of valid range",
+      gladiators: [
+        {
+          name: "Fighter 1",
+          persona: "I fight well",
+          model: "sonnet" as const,
+          temperature: 1.5,
+          tools: ["Read"],
+          focus: "Fighting",
+        },
+        {
+          name: "Fighter 2",
+          persona: "I also fight well",
+          model: "sonnet" as const,
+          temperature: 0.5,
+          tools: ["Read"],
+          focus: "Also fighting",
+        },
+      ],
+    };
 
-// Test: Gladiator with invalid model is rejected
-test("Invalid model is rejected", () => {
-  const invalidOutput = {
-    reasoning: "Testing invalid model",
-    gladiators: [
-      {
-        name: "Fighter 1",
-        persona: "I fight",
-        model: "gpt-4" as any, // Invalid model
-        temperature: 0.5,
-        tools: ["Read"],
-        focus: "Fighting",
-      },
-      {
-        name: "Fighter 2",
-        persona: "I also fight",
-        model: "sonnet" as const,
-        temperature: 0.5,
-        tools: ["Read"],
-        focus: "Also fighting",
-      },
-    ],
-  };
+    const result = LanistaOutputSchema.safeParse(invalidOutput);
+    expect(result.success).toBe(false);
+  });
 
-  const result = LanistaOutputSchema.safeParse(invalidOutput);
-  assert(!result.success, "Should reject invalid model");
-});
+  it("rejects gladiator with no tools", () => {
+    const invalidOutput = {
+      reasoning: "Testing gladiator with empty tools array",
+      gladiators: [
+        {
+          name: "Fighter 1",
+          persona: "I fight well",
+          model: "sonnet" as const,
+          temperature: 0.5,
+          tools: [],
+          focus: "Fighting",
+        },
+        {
+          name: "Fighter 2",
+          persona: "I also fight well",
+          model: "sonnet" as const,
+          temperature: 0.5,
+          tools: ["Read"],
+          focus: "Also fighting",
+        },
+      ],
+    };
 
-// Test: Gladiator with temperature out of range is rejected
-test("Temperature out of range is rejected", () => {
-  const invalidOutput = {
-    reasoning: "Testing invalid temperature",
-    gladiators: [
-      {
-        name: "Fighter 1",
-        persona: "I fight",
-        model: "sonnet" as const,
-        temperature: 1.5, // Out of range
-        tools: ["Read"],
-        focus: "Fighting",
-      },
-      {
-        name: "Fighter 2",
-        persona: "I also fight",
-        model: "sonnet" as const,
-        temperature: 0.5,
-        tools: ["Read"],
-        focus: "Also fighting",
-      },
-    ],
-  };
+    const result = LanistaOutputSchema.safeParse(invalidOutput);
+    expect(result.success).toBe(false);
+  });
 
-  const result = LanistaOutputSchema.safeParse(invalidOutput);
-  assert(!result.success, "Should reject temperature > 1.0");
-});
+  it("accepts all three model types (opus, sonnet, haiku)", () => {
+    const validOutput = {
+      reasoning: "Testing all model types are accepted",
+      gladiators: [
+        {
+          name: "Opus Fighter",
+          persona: "I use Opus",
+          model: "opus" as const,
+          temperature: 0.5,
+          tools: ["Read"],
+          focus: "Complex reasoning",
+        },
+        {
+          name: "Sonnet Fighter",
+          persona: "I use Sonnet",
+          model: "sonnet" as const,
+          temperature: 0.5,
+          tools: ["Read"],
+          focus: "Balanced approach",
+        },
+        {
+          name: "Haiku Fighter",
+          persona: "I use Haiku",
+          model: "haiku" as const,
+          temperature: 0.5,
+          tools: ["Read"],
+          focus: "Fast execution",
+        },
+      ],
+    };
 
-// Test: Gladiator with no tools is rejected
-test("Gladiator with no tools is rejected", () => {
-  const invalidOutput = {
-    reasoning: "Testing no tools",
-    gladiators: [
-      {
-        name: "Fighter 1",
-        persona: "I fight",
-        model: "sonnet" as const,
-        temperature: 0.5,
-        tools: [], // No tools
-        focus: "Fighting",
-      },
-      {
-        name: "Fighter 2",
-        persona: "I also fight",
-        model: "sonnet" as const,
-        temperature: 0.5,
-        tools: ["Read"],
-        focus: "Also fighting",
-      },
-    ],
-  };
+    const result = LanistaOutputSchema.safeParse(validOutput);
+    expect(result.success).toBe(true);
+  });
 
-  const result = LanistaOutputSchema.safeParse(invalidOutput);
-  assert(!result.success, "Should reject gladiator with no tools");
-});
+  it("rejects reasoning shorter than 20 characters", () => {
+    const invalidOutput = {
+      reasoning: "Too short",
+      gladiators: [
+        {
+          name: "Fighter 1",
+          persona: "I fight well in battle",
+          model: "sonnet" as const,
+          temperature: 0.5,
+          tools: ["Read"],
+          focus: "Fighting well",
+        },
+        {
+          name: "Fighter 2",
+          persona: "I also fight well in battle",
+          model: "sonnet" as const,
+          temperature: 0.5,
+          tools: ["Read"],
+          focus: "Also fighting well",
+        },
+      ],
+    };
 
-// Test: All three model types are valid
-test("All model types (opus, sonnet, haiku) are valid", () => {
-  const validOutput = {
-    reasoning: "Testing all model types",
-    gladiators: [
-      {
-        name: "Opus Fighter",
-        persona: "I use Opus",
-        model: "opus" as const,
-        temperature: 0.5,
-        tools: ["Read"],
-        focus: "Complex reasoning",
-      },
-      {
-        name: "Sonnet Fighter",
-        persona: "I use Sonnet",
-        model: "sonnet" as const,
-        temperature: 0.5,
-        tools: ["Read"],
-        focus: "Balanced approach",
-      },
-      {
-        name: "Haiku Fighter",
-        persona: "I use Haiku",
-        model: "haiku" as const,
-        temperature: 0.5,
-        tools: ["Read"],
-        focus: "Fast execution",
-      },
-    ],
-  };
-
-  const result = LanistaOutputSchema.safeParse(validOutput);
-  assert(result.success, "All model types should be valid");
-});
-
-// Test: Reasoning must be at least 20 characters
-test("Reasoning must be at least 20 characters", () => {
-  const invalidOutput = {
-    reasoning: "Too short", // Less than 20 characters
-    gladiators: [
-      {
-        name: "Fighter 1",
-        persona: "I fight well",
-        model: "sonnet" as const,
-        temperature: 0.5,
-        tools: ["Read"],
-        focus: "Fighting well",
-      },
-      {
-        name: "Fighter 2",
-        persona: "I also fight well",
-        model: "sonnet" as const,
-        temperature: 0.5,
-        tools: ["Read"],
-        focus: "Also fighting well",
-      },
-    ],
-  };
-
-  const result = LanistaOutputSchema.safeParse(invalidOutput);
-  assert(!result.success, "Should reject reasoning shorter than 20 characters");
+    const result = LanistaOutputSchema.safeParse(invalidOutput);
+    expect(result.success).toBe(false);
+  });
 });

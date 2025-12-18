@@ -1,21 +1,22 @@
-import type { Readable } from "node:stream";
+/**
+ * Trial Container Management
+ *
+ * Creates and manages Docker containers for code battle trials.
+ * Each container runs an agent server that handles Claude sessions.
+ */
+
 import type Docker from "dockerode";
+import { type AgentServerClient, createAgentClient } from "./agent-client";
 import { getDockerClient } from "./client";
 
-/**
- * Configuration for a trial container
- */
 export interface TrialContainerConfig {
   trialId: string;
   image?: string;
-  memoryLimit?: number; // in bytes
-  cpuLimit?: number; // CPU count
-  timeout?: number; // in milliseconds
+  memoryLimit?: number;
+  cpuLimit?: number;
+  timeout?: number;
 }
 
-/**
- * Trial container instance
- */
 export interface TrialContainer {
   id: string;
   trialId: string;
@@ -23,40 +24,19 @@ export interface TrialContainer {
   createdAt: Date;
   timeoutHandle: NodeJS.Timeout;
 
-  /**
-   * Execute a command in the container
-   */
+  getAgentClient(): AgentServerClient;
+  getAgentServerUrl(): string;
+  waitForAgentServer(maxWaitMs?: number): Promise<boolean>;
   exec(cmd: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }>;
-
-  /**
-   * Execute a command and stream the output
-   */
-  execStream(cmd: string[]): Promise<Readable>;
-
-  /**
-   * Copy a file into the container
-   */
-  copyFileIn(localPath: string, containerPath: string): Promise<void>;
-
-  /**
-   * Copy a file from the container
-   */
-  copyFileOut(containerPath: string, localPath: string): Promise<void>;
-
-  /**
-   * Destroy the container
-   */
   destroy(): Promise<void>;
 }
 
-const CONTAINER_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-const DEFAULT_MEMORY_LIMIT = 2 * 1024 * 1024 * 1024; // 2GB
+const CONTAINER_TIMEOUT = 30 * 60 * 1000;
+const DEFAULT_MEMORY_LIMIT = 2 * 1024 * 1024 * 1024;
 const DEFAULT_CPU_LIMIT = 1;
-const DEFAULT_IMAGE = "node:20-alpine";
+const DEFAULT_IMAGE = "thunderdome/agent-server:latest";
+const AGENT_SERVER_PORT = 3000;
 
-/**
- * Create a trial container with resource limits and security settings
- */
 export async function createTrialContainer(config: TrialContainerConfig): Promise<TrialContainer> {
   const docker = getDockerClient();
 
@@ -68,12 +48,10 @@ export async function createTrialContainer(config: TrialContainerConfig): Promis
     timeout = CONTAINER_TIMEOUT,
   } = config;
 
-  // Pull image if not present
   try {
     await docker.pull(image);
   } catch (_error) {}
 
-  // Create container with security and resource constraints
   const container = await docker.createContainer({
     Image: image,
     name: `trial-${trialId}`,
@@ -83,15 +61,19 @@ export async function createTrialContainer(config: TrialContainerConfig): Promis
     AttachStderr: true,
     OpenStdin: false,
     WorkingDir: "/workspace",
+    ExposedPorts: {
+      [`${AGENT_SERVER_PORT}/tcp`]: {},
+    },
     HostConfig: {
       Memory: memoryLimit,
-      MemorySwap: memoryLimit, // Prevent swap
+      MemorySwap: memoryLimit,
       NanoCpus: cpuLimit * 1e9,
       SecurityOpt: ["no-new-privileges"],
       CapDrop: ["ALL"],
-      CapAdd: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"], // Minimal capabilities
-      ReadonlyRootfs: false, // Need to write to workspace
-      AutoRemove: false, // We'll handle removal manually
+      CapAdd: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"],
+      ReadonlyRootfs: false,
+      AutoRemove: false,
+      PublishAllPorts: true,
     },
     Labels: {
       "thunderdome.trial-id": trialId,
@@ -101,9 +83,22 @@ export async function createTrialContainer(config: TrialContainerConfig): Promis
 
   await container.start();
 
+  const containerInfo = await container.inspect();
+  const portBindings = containerInfo.NetworkSettings.Ports;
+  const portMapping = portBindings[`${AGENT_SERVER_PORT}/tcp`];
+
+  if (!portMapping || portMapping.length === 0) {
+    throw new Error("Agent server port not mapped");
+  }
+
+  const hostPort = parseInt(portMapping[0].HostPort, 10);
+  const hostIp = portMapping[0].HostIp || "127.0.0.1";
+  const agentServerUrl = `http://${hostIp === "0.0.0.0" ? "127.0.0.1" : hostIp}:${hostPort}`;
+
+  const agentClient = createAgentClient(hostIp === "0.0.0.0" ? "127.0.0.1" : hostIp, hostPort);
+
   let isDestroyed = false;
 
-  // Auto-destroy after timeout
   const timeoutHandle = setTimeout(async () => {
     if (!isDestroyed) {
       await destroyContainer(container);
@@ -128,6 +123,18 @@ export async function createTrialContainer(config: TrialContainerConfig): Promis
     createdAt: new Date(),
     timeoutHandle,
 
+    getAgentClient(): AgentServerClient {
+      return agentClient;
+    },
+
+    getAgentServerUrl(): string {
+      return agentServerUrl;
+    },
+
+    async waitForAgentServer(maxWaitMs: number = 30000): Promise<boolean> {
+      return agentClient.waitForHealthy(maxWaitMs);
+    },
+
     async exec(cmd: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
       const exec = await container.exec({
         Cmd: cmd,
@@ -141,7 +148,6 @@ export async function createTrialContainer(config: TrialContainerConfig): Promis
       let stderr = "";
 
       return new Promise((resolve, reject) => {
-        // Demux the stream (Docker multiplexes stdout and stderr)
         container.modem.demuxStream(
           stream,
           {
@@ -170,67 +176,6 @@ export async function createTrialContainer(config: TrialContainerConfig): Promis
         });
 
         stream.on("error", reject);
-      });
-    },
-
-    async execStream(cmd: string[]): Promise<Readable> {
-      const exec = await container.exec({
-        Cmd: cmd,
-        AttachStdout: true,
-        AttachStderr: true,
-      });
-
-      const stream = await exec.start({ hijack: true, stdin: false });
-      return stream as unknown as Readable;
-    },
-
-    async copyFileIn(localPath: string, containerPath: string): Promise<void> {
-      const fs = await import("node:fs");
-      const path = await import("node:path");
-      const tar = await import("tar-stream");
-
-      const pack = tar.pack();
-      const fileName = path.basename(containerPath);
-      const fileContent = fs.readFileSync(localPath);
-
-      pack.entry({ name: fileName }, fileContent, (err) => {
-        if (err) throw err;
-        pack.finalize();
-      });
-
-      const containerDir = path.dirname(containerPath);
-      await container.putArchive(pack, { path: containerDir });
-    },
-
-    async copyFileOut(containerPath: string, localPath: string): Promise<void> {
-      const fs = await import("node:fs");
-      const _path = await import("node:path");
-      const tar = await import("tar-stream");
-
-      const stream = await container.getArchive({ path: containerPath });
-      const extract = tar.extract();
-
-      return new Promise((resolve, reject) => {
-        extract.on("entry", (_header, entryStream, next) => {
-          const chunks: Buffer[] = [];
-
-          entryStream.on("data", (chunk: Buffer) => {
-            chunks.push(chunk);
-          });
-
-          entryStream.on("end", () => {
-            fs.writeFileSync(localPath, Buffer.concat(chunks));
-            next();
-          });
-
-          entryStream.on("error", reject);
-          entryStream.resume();
-        });
-
-        extract.on("finish", resolve);
-        extract.on("error", reject);
-
-        stream.pipe(extract);
       });
     },
 
