@@ -5,8 +5,8 @@
  */
 
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/session";
 import { getUserInstallations } from "@/lib/github/app";
+import { requireUser } from "@/lib/session";
 
 /**
  * GET - List all user's GitHub App installations
@@ -29,9 +29,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Error fetching installations:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch installations" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch installations" }, { status: 500 });
   }
 }

@@ -6,12 +6,8 @@
  */
 
 import { NextResponse } from "next/server";
+import { getUserAppRepos, getUserInstallations, syncInstallationRepos } from "@/lib/github/app";
 import { requireUser } from "@/lib/session";
-import {
-  getUserAppRepos,
-  getUserInstallations,
-  syncInstallationRepos,
-} from "@/lib/github/app";
 
 /**
  * GET - List all repos accessible via user's GitHub App installations
@@ -48,10 +44,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Error fetching GitHub App repos:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch repositories" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch repositories" }, { status: 500 });
   }
 }
 
@@ -65,16 +58,11 @@ export async function POST() {
     const installations = await getUserInstallations(user.id);
 
     if (installations.length === 0) {
-      return NextResponse.json(
-        { error: "No GitHub App installation found" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "No GitHub App installation found" }, { status: 400 });
     }
 
     // Sync repos for each installation
-    await Promise.all(
-      installations.map((inst) => syncInstallationRepos(inst.installationId))
-    );
+    await Promise.all(installations.map((inst) => syncInstallationRepos(inst.installationId)));
 
     // Return updated repos
     const repos = await getUserAppRepos(user.id);
@@ -92,9 +80,6 @@ export async function POST() {
     });
   } catch (error) {
     console.error("Error syncing GitHub App repos:", error);
-    return NextResponse.json(
-      { error: "Failed to sync repositories" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to sync repositories" }, { status: 500 });
   }
 }

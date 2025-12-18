@@ -6,8 +6,7 @@ import { type Options, query, type SDKMessage } from "@anthropic-ai/claude-agent
 import type { AgentConfig, AgentResult, CostInfo, StreamEvent } from "./types";
 
 // Use system-installed Claude CLI
-const CLAUDE_CLI_PATH =
-  process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
+const CLAUDE_CLI_PATH = process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
 
 /**
  * Processes an SDK message into a StreamEvent

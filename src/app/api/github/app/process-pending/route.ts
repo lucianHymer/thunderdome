@@ -28,11 +28,7 @@ export async function POST() {
     }
 
     console.log(`[ProcessPending] Processing installation ${installationId} for user ${user.id}`);
-    const result = await processInstallation(
-      user.id,
-      parseInt(installationId, 10),
-      setupAction
-    );
+    const result = await processInstallation(user.id, parseInt(installationId, 10), setupAction);
 
     // Clear the cookie
     cookieStore.delete("pending_installation");
@@ -40,16 +36,10 @@ export async function POST() {
     if (result.success) {
       return NextResponse.json({ processed: true, action: setupAction });
     } else {
-      return NextResponse.json(
-        { processed: false, error: result.error },
-        { status: 500 }
-      );
+      return NextResponse.json({ processed: false, error: result.error }, { status: 500 });
     }
   } catch (error) {
     console.error("[ProcessPending] Error:", error);
-    return NextResponse.json(
-      { error: "Failed to process installation" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to process installation" }, { status: 500 });
   }
 }

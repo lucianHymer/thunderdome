@@ -91,22 +91,15 @@
           "name": "accounts_user_id_users_id_fk",
           "tableFrom": "accounts",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "accounts_provider_provider_account_id_pk": {
-          "columns": [
-            "provider",
-            "provider_account_id"
-          ],
+          "columns": ["provider", "provider_account_id"],
           "name": "accounts_provider_provider_account_id_pk"
         }
       },
@@ -165,12 +158,8 @@
           "name": "decrees_trial_id_trials_id_fk",
           "tableFrom": "decrees",
           "tableTo": "trials",
-          "columnsFrom": [
-            "trial_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trial_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -249,9 +238,7 @@
       "indexes": {
         "github_app_installations_installation_id_unique": {
           "name": "github_app_installations_installation_id_unique",
-          "columns": [
-            "installation_id"
-          ],
+          "columns": ["installation_id"],
           "isUnique": true
         }
       },
@@ -260,12 +247,8 @@
           "name": "github_app_installations_user_id_users_id_fk",
           "tableFrom": "github_app_installations",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -327,12 +310,8 @@
           "name": "github_app_repos_installation_id_github_app_installations_installation_id_fk",
           "tableFrom": "github_app_repos",
           "tableTo": "github_app_installations",
-          "columnsFrom": [
-            "installation_id"
-          ],
-          "columnsTo": [
-            "installation_id"
-          ],
+          "columnsFrom": ["installation_id"],
+          "columnsTo": ["installation_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -444,12 +423,8 @@
           "name": "gladiators_trial_id_trials_id_fk",
           "tableFrom": "gladiators",
           "tableTo": "trials",
-          "columnsFrom": [
-            "trial_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trial_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -517,12 +492,8 @@
           "name": "judges_trial_id_trials_id_fk",
           "tableFrom": "judges",
           "tableTo": "trials",
-          "columnsFrom": [
-            "trial_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trial_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -587,9 +558,7 @@
       "indexes": {
         "repo_setups_repo_url_unique": {
           "name": "repo_setups_repo_url_unique",
-          "columns": [
-            "repo_url"
-          ],
+          "columns": ["repo_url"],
           "isUnique": true
         }
       },
@@ -598,12 +567,8 @@
           "name": "repo_setups_user_id_users_id_fk",
           "tableFrom": "repo_setups",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -643,12 +608,8 @@
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -746,12 +707,8 @@
           "name": "trials_user_id_users_id_fk",
           "tableFrom": "trials",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -844,16 +801,12 @@
       "indexes": {
         "users_email_unique": {
           "name": "users_email_unique",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "isUnique": true
         },
         "users_github_id_unique": {
           "name": "users_github_id_unique",
-          "columns": [
-            "github_id"
-          ],
+          "columns": ["github_id"],
           "isUnique": true
         }
       },
@@ -911,9 +864,7 @@
       "indexes": {
         "verdicts_trial_id_unique": {
           "name": "verdicts_trial_id_unique",
-          "columns": [
-            "trial_id"
-          ],
+          "columns": ["trial_id"],
           "isUnique": true
         }
       },
@@ -922,12 +873,8 @@
           "name": "verdicts_trial_id_trials_id_fk",
           "tableFrom": "verdicts",
           "tableTo": "trials",
-          "columnsFrom": [
-            "trial_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trial_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -935,12 +882,8 @@
           "name": "verdicts_winner_gladiator_id_gladiators_id_fk",
           "tableFrom": "verdicts",
           "tableTo": "gladiators",
-          "columnsFrom": [
-            "winner_gladiator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["winner_gladiator_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -978,10 +921,7 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "verification_tokens_identifier_token_pk": {
-          "columns": [
-            "identifier",
-            "token"
-          ],
+          "columns": ["identifier", "token"],
           "name": "verification_tokens_identifier_token_pk"
         }
       },

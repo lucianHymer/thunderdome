@@ -5,10 +5,10 @@
  */
 
 import {
+  deleteInstallation,
   getInstallationOctokit,
   saveInstallation,
   syncInstallationRepos,
-  deleteInstallation,
 } from "./app";
 
 /**
@@ -18,7 +18,7 @@ import {
 export async function processInstallation(
   userId: string,
   installationId: number,
-  setupAction: string
+  setupAction: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Handle deletion
@@ -44,9 +44,7 @@ export async function processInstallation(
       if ("login" in account && account.login) {
         accountLogin = account.login;
         accountType =
-          "type" in account && account.type === "Organization"
-            ? "Organization"
-            : "User";
+          "type" in account && account.type === "Organization" ? "Organization" : "User";
       } else if ("slug" in account && account.slug) {
         accountLogin = account.slug;
         accountType = "Organization";

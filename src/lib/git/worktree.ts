@@ -37,7 +37,14 @@ export async function cloneRepo(
   await container.exec(["git", "clone", url.toString(), REPO_PATH]);
 
   // Configure git identity for commits
-  await container.exec(["git", "-C", REPO_PATH, "config", "user.email", "gladiator@thunderdome.app"]);
+  await container.exec([
+    "git",
+    "-C",
+    REPO_PATH,
+    "config",
+    "user.email",
+    "gladiator@thunderdome.app",
+  ]);
   await container.exec(["git", "-C", REPO_PATH, "config", "user.name", "Thunderdome Gladiator"]);
 }
 
@@ -53,12 +60,7 @@ export async function createWorktree(
 
   // Create worktree with new branch from main repo
   // -b creates the branch, worktree path, starting from HEAD
-  await container.exec([
-    "git", "-C", REPO_PATH,
-    "worktree", "add",
-    "-b", branchName,
-    worktreePath,
-  ]);
+  await container.exec(["git", "-C", REPO_PATH, "worktree", "add", "-b", branchName, worktreePath]);
 
   return worktreePath;
 }
@@ -82,7 +84,12 @@ export async function commitWorktreeChanges(
 
   // Check if there are changes to commit
   const { exitCode } = await container.exec([
-    "git", "-C", worktreePath, "diff", "--cached", "--quiet"
+    "git",
+    "-C",
+    worktreePath,
+    "diff",
+    "--cached",
+    "--quiet",
   ]);
 
   // exitCode 0 = no changes, 1 = has changes
@@ -105,10 +112,7 @@ export async function pushWorktree(
   url.username = "x-access-token";
   url.password = token;
 
-  await container.exec([
-    "git", "-C", REPO_PATH,
-    "push", url.toString(), branchName,
-  ]);
+  await container.exec(["git", "-C", REPO_PATH, "push", url.toString(), branchName]);
 }
 
 /**
@@ -128,8 +132,11 @@ export async function pushAllWorktrees(
   // Push all branches matching our trial pattern
   // Using refspec to push all thunderdome branches
   await container.exec([
-    "git", "-C", REPO_PATH,
-    "push", url.toString(),
+    "git",
+    "-C",
+    REPO_PATH,
+    "push",
+    url.toString(),
     "--force-with-lease",
     `refs/heads/thunderdome/trial-${trialId}/*:refs/heads/thunderdome/trial-${trialId}/*`,
   ]);

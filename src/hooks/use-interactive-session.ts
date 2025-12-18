@@ -174,9 +174,7 @@ export function useInteractiveSession(config: SessionConfig): UseInteractiveSess
 
             // Update or create the assistant message
             setMessages((prev) => {
-              const existingIdx = prev.findIndex(
-                (m) => m.role === "assistant" && m.isPartial,
-              );
+              const existingIdx = prev.findIndex((m) => m.role === "assistant" && m.isPartial);
 
               if (existingIdx >= 0) {
                 const updated = [...prev];
@@ -247,7 +245,13 @@ export function useInteractiveSession(config: SessionConfig): UseInteractiveSess
           break;
 
         case "result": {
-          const { success, result: resultContent, error: resultError, cost, turns } = event.content || {};
+          const {
+            success,
+            result: resultContent,
+            error: resultError,
+            cost,
+            turns,
+          } = event.content || {};
           setResult({
             success,
             content: resultContent,

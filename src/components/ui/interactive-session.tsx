@@ -143,9 +143,7 @@ function DefaultMessage({
         )}
       >
         {!isUser && (
-          <div className={cn("text-xs font-medium mb-1", theme.accent)}>
-            {assistantLabel}
-          </div>
+          <div className={cn("text-xs font-medium mb-1", theme.accent)}>{assistantLabel}</div>
         )}
         <div className="text-sm">
           {isUser ? (
@@ -235,7 +233,8 @@ export function InteractiveSession({
 
   const isStreaming = status === "streaming" || status === "connecting";
   const canSend = !isStreaming && !disabled && input.trim().length > 0;
-  const showQuickActions = quickActions && quickActions.length > 0 && !isStreaming && messages.length > 0;
+  const showQuickActions =
+    quickActions && quickActions.length > 0 && !isStreaming && messages.length > 0;
 
   // Compute tool stats from messages
   const { currentTool, toolCount } = useMemo(() => {
@@ -354,11 +353,7 @@ export function InteractiveSession({
 
       {/* Input */}
       <div
-        className={cn(
-          "shrink-0 flex gap-2 pt-3 border-t items-end",
-          theme.border,
-          inputClassName,
-        )}
+        className={cn("shrink-0 flex gap-2 pt-3 border-t items-end", theme.border, inputClassName)}
       >
         <Textarea
           ref={textareaRef}
@@ -374,12 +369,7 @@ export function InteractiveSession({
           rows={1}
         />
         {isStreaming && onStop ? (
-          <Button
-            onClick={onStop}
-            size="icon"
-            variant="destructive"
-            className="shrink-0"
-          >
+          <Button onClick={onStop} size="icon" variant="destructive" className="shrink-0">
             <Square className="h-4 w-4" />
           </Button>
         ) : (

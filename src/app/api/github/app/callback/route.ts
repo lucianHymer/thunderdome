@@ -9,14 +9,14 @@
  * - setup_action: "install" | "update" | "delete"
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/session";
+import { type NextRequest, NextResponse } from "next/server";
 import {
+  deleteInstallation,
   getInstallationOctokit,
   saveInstallation,
   syncInstallationRepos,
-  deleteInstallation,
 } from "@/lib/github/app";
+import { requireUser } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     if (!installationId) {
       return NextResponse.redirect(
-        `/?error=${encodeURIComponent("Missing installation_id from GitHub")}`
+        `/?error=${encodeURIComponent("Missing installation_id from GitHub")}`,
       );
     }
 
@@ -44,10 +44,9 @@ export async function GET(request: NextRequest) {
     const octokit = await getInstallationOctokit(installationIdNum);
 
     // Get installation details
-    const { data: installation } =
-      await octokit.rest.apps.getInstallation({
-        installation_id: installationIdNum,
-      });
+    const { data: installation } = await octokit.rest.apps.getInstallation({
+      installation_id: installationIdNum,
+    });
 
     // Extract account info - handle different account types
     const account = installation.account;
@@ -58,9 +57,8 @@ export async function GET(request: NextRequest) {
       // User accounts have 'login', Organization accounts have 'slug' or 'name'
       if ("login" in account && account.login) {
         accountLogin = account.login;
-        accountType = "type" in account && account.type === "Organization"
-          ? "Organization"
-          : "User";
+        accountType =
+          "type" in account && account.type === "Organization" ? "Organization" : "User";
       } else if ("slug" in account && account.slug) {
         accountLogin = account.slug;
         accountType = "Organization";
@@ -82,13 +80,11 @@ export async function GET(request: NextRequest) {
     await syncInstallationRepos(installationIdNum);
 
     const action = setupAction === "update" ? "updated" : "installed";
-    return NextResponse.redirect(
-      `/?message=GitHub+App+${action}+successfully`
-    );
+    return NextResponse.redirect(`/?message=GitHub+App+${action}+successfully`);
   } catch (error) {
     console.error("GitHub App callback error:", error);
     return NextResponse.redirect(
-      `/?error=${encodeURIComponent("Failed to complete GitHub App setup")}`
+      `/?error=${encodeURIComponent("Failed to complete GitHub App setup")}`,
     );
   }
 }

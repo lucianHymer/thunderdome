@@ -59,7 +59,10 @@ export async function streamTextToSSE(
  * @param text - The text to stream
  * @param delayMs - Delay between words (default: 20)
  */
-export function createWordStreamResponse(text: string, delayMs: number = 20): ReadableStream<Uint8Array> {
+export function createWordStreamResponse(
+  text: string,
+  delayMs: number = 20,
+): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
 
   return new ReadableStream({

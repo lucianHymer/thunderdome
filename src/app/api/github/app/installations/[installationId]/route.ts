@@ -4,12 +4,12 @@
  * DELETE /api/github/app/installations/[installationId] - Remove an installation
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/session";
-import { deleteInstallation } from "@/lib/github/app";
+import { and, eq } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { githubAppInstallations } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { deleteInstallation } from "@/lib/github/app";
+import { requireUser } from "@/lib/session";
 
 interface RouteParams {
   params: Promise<{ installationId: string }>;
@@ -26,10 +26,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const installationIdNum = Number.parseInt(installationId, 10);
     if (Number.isNaN(installationIdNum)) {
-      return NextResponse.json(
-        { error: "Invalid installation ID" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid installation ID" }, { status: 400 });
     }
 
     // Verify the installation belongs to this user
@@ -39,16 +36,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .where(
         and(
           eq(githubAppInstallations.installationId, installationIdNum),
-          eq(githubAppInstallations.userId, user.id)
-        )
+          eq(githubAppInstallations.userId, user.id),
+        ),
       )
       .limit(1);
 
     if (!installation) {
-      return NextResponse.json(
-        { error: "Installation not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Installation not found" }, { status: 404 });
     }
 
     await deleteInstallation(installationIdNum);
@@ -56,9 +50,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting installation:", error);
-    return NextResponse.json(
-      { error: "Failed to delete installation" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to delete installation" }, { status: 500 });
   }
 }

@@ -5,10 +5,10 @@
  * Provides scoped, short-lived tokens for repository access.
  */
 
-import { App, Octokit } from "octokit";
+import { and, eq } from "drizzle-orm";
+import { App, type Octokit } from "octokit";
 import { db } from "@/db";
 import { githubAppInstallations, githubAppRepos } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
 
 // Environment validation
 function getAppConfig() {
@@ -19,7 +19,7 @@ function getAppConfig() {
 
   if (!clientId || !privateKeyBase64) {
     throw new Error(
-      "GitHub App not configured. Set GITHUB_APP_CLIENT_ID and GITHUB_APP_PRIVATE_KEY environment variables."
+      "GitHub App not configured. Set GITHUB_APP_CLIENT_ID and GITHUB_APP_PRIVATE_KEY environment variables.",
     );
   }
 
@@ -49,9 +49,7 @@ export function getGitHubApp(): App {
 /**
  * Get an authenticated Octokit instance for a specific installation
  */
-export async function getInstallationOctokit(
-  installationId: number
-): Promise<Octokit> {
+export async function getInstallationOctokit(installationId: number): Promise<Octokit> {
   const app = getGitHubApp();
   return app.getInstallationOctokit(installationId);
 }
@@ -62,7 +60,7 @@ export async function getInstallationOctokit(
  */
 export async function getInstallationToken(
   installationId: number,
-  repositories?: string[] // Optional: scope to specific repos by name
+  repositories?: string[], // Optional: scope to specific repos by name
 ): Promise<{
   token: string;
   expiresAt: Date;
@@ -88,7 +86,7 @@ export async function getInstallationToken(
  */
 export async function findInstallationForRepo(
   repoFullName: string,
-  userId: string
+  userId: string,
 ): Promise<{ installationId: number; accountLogin: string } | null> {
   // First check our cached repos
   const cachedRepo = await db
@@ -99,13 +97,10 @@ export async function findInstallationForRepo(
     .from(githubAppRepos)
     .innerJoin(
       githubAppInstallations,
-      eq(githubAppRepos.installationId, githubAppInstallations.installationId)
+      eq(githubAppRepos.installationId, githubAppInstallations.installationId),
     )
     .where(
-      and(
-        eq(githubAppRepos.repoFullName, repoFullName),
-        eq(githubAppInstallations.userId, userId)
-      )
+      and(eq(githubAppRepos.repoFullName, repoFullName), eq(githubAppInstallations.userId, userId)),
     )
     .limit(1);
 
@@ -120,16 +115,14 @@ export async function findInstallationForRepo(
     .where(
       and(
         eq(githubAppInstallations.userId, userId),
-        eq(githubAppInstallations.repositorySelection, "all")
-      )
+        eq(githubAppInstallations.repositorySelection, "all"),
+      ),
     )
     .limit(1);
 
   if (allReposInstallation.length > 0) {
     // Verify the repo is accessible via this installation
-    const octokit = await getInstallationOctokit(
-      allReposInstallation[0].installationId
-    );
+    const octokit = await getInstallationOctokit(allReposInstallation[0].installationId);
     try {
       const [owner, repo] = repoFullName.split("/");
       await octokit.rest.repos.get({ owner, repo });
@@ -159,7 +152,7 @@ export type RepoAccessResult =
  */
 export async function checkRepoAccess(
   repoFullName: string,
-  userId: string
+  userId: string,
 ): Promise<RepoAccessResult> {
   // First check our cached repos
   const cachedRepo = await db
@@ -170,13 +163,10 @@ export async function checkRepoAccess(
     .from(githubAppRepos)
     .innerJoin(
       githubAppInstallations,
-      eq(githubAppRepos.installationId, githubAppInstallations.installationId)
+      eq(githubAppRepos.installationId, githubAppInstallations.installationId),
     )
     .where(
-      and(
-        eq(githubAppRepos.repoFullName, repoFullName),
-        eq(githubAppInstallations.userId, userId)
-      )
+      and(eq(githubAppRepos.repoFullName, repoFullName), eq(githubAppInstallations.userId, userId)),
     )
     .limit(1);
 
@@ -201,15 +191,11 @@ export async function checkRepoAccess(
 
   // User has installation but repo isn't included
   // Check if it's an "all repos" installation that might have access
-  const allReposInstallation = anyInstallation.find(
-    (i) => i.repositorySelection === "all"
-  );
+  const allReposInstallation = anyInstallation.find((i) => i.repositorySelection === "all");
 
   if (allReposInstallation) {
     try {
-      const octokit = await getInstallationOctokit(
-        allReposInstallation.installationId
-      );
+      const octokit = await getInstallationOctokit(allReposInstallation.installationId);
       const [owner, repo] = repoFullName.split("/");
       await octokit.rest.repos.get({ owner, repo });
       return {
@@ -236,7 +222,7 @@ export async function checkRepoAccess(
  */
 export async function getRepoToken(
   repoFullName: string,
-  userId: string
+  userId: string,
 ): Promise<{ token: string; expiresAt: Date } | null> {
   const installation = await findInstallationForRepo(repoFullName, userId);
   if (!installation) {
@@ -250,21 +236,16 @@ export async function getRepoToken(
 /**
  * Sync repositories for an installation from GitHub API
  */
-export async function syncInstallationRepos(
-  installationId: number
-): Promise<void> {
+export async function syncInstallationRepos(installationId: number): Promise<void> {
   const octokit = await getInstallationOctokit(installationId);
 
   // Get all repos accessible by this installation
-  const repos = await octokit.paginate(
-    octokit.rest.apps.listReposAccessibleToInstallation,
-    { per_page: 100 }
-  );
+  const repos = await octokit.paginate(octokit.rest.apps.listReposAccessibleToInstallation, {
+    per_page: 100,
+  });
 
   // Delete existing cached repos for this installation
-  await db
-    .delete(githubAppRepos)
-    .where(eq(githubAppRepos.installationId, installationId));
+  await db.delete(githubAppRepos).where(eq(githubAppRepos.installationId, installationId));
 
   // Insert new repos
   if (repos.length > 0) {
@@ -274,7 +255,7 @@ export async function syncInstallationRepos(
         repoFullName: repo.full_name,
         repoId: repo.id,
         private: repo.private,
-      }))
+      })),
     );
   }
 }
@@ -292,10 +273,7 @@ export function getInstallationUrl(): string {
  * List all installations for a user
  */
 export async function getUserInstallations(userId: string) {
-  return db
-    .select()
-    .from(githubAppInstallations)
-    .where(eq(githubAppInstallations.userId, userId));
+  return db.select().from(githubAppInstallations).where(eq(githubAppInstallations.userId, userId));
 }
 
 /**
@@ -313,7 +291,7 @@ export async function getUserAppRepos(userId: string) {
     .from(githubAppRepos)
     .innerJoin(
       githubAppInstallations,
-      eq(githubAppRepos.installationId, githubAppInstallations.installationId)
+      eq(githubAppRepos.installationId, githubAppInstallations.installationId),
     )
     .where(eq(githubAppInstallations.userId, userId));
 }
@@ -328,7 +306,7 @@ export async function saveInstallation(
     accountLogin: string;
     accountType: "User" | "Organization";
     repositorySelection: "all" | "selected";
-  }
+  },
 ): Promise<void> {
   await db
     .insert(githubAppInstallations)

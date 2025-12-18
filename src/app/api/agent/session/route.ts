@@ -17,8 +17,8 @@ import {
   closeSession,
   createInteractiveSession,
   getSession,
-  processSDKMessage,
   type InteractiveSessionConfig,
+  processSDKMessage,
 } from "@/lib/claude/interactive-session";
 import { decrypt } from "@/lib/encryption";
 import { requireUser } from "@/lib/session";
@@ -58,11 +58,7 @@ function createSSEResponse(stream: ReadableStream): NextResponse {
 /**
  * Send SSE event
  */
-function sendSSE(
-  controller: ReadableStreamDefaultController,
-  encoder: TextEncoder,
-  event: any,
-) {
+function sendSSE(controller: ReadableStreamDefaultController, encoder: TextEncoder, event: any) {
   controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
 }
 

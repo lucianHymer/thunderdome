@@ -9,8 +9,8 @@
 
 import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { InteractiveSession, type QuickAction } from "@/components/ui/interactive-session";
 import { Button } from "@/components/ui/button";
+import { InteractiveSession, type QuickAction } from "@/components/ui/interactive-session";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,12 +42,7 @@ function parseSetupFiles(text: string): { setupMd: string; setupSh: string } | n
   };
 }
 
-export function SetupDiscovery({
-  owner,
-  repo,
-  onComplete,
-  onCancel,
-}: SetupDiscoveryProps) {
+export function SetupDiscovery({ owner, repo, onComplete, onCancel }: SetupDiscoveryProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [initialGuidance, setInitialGuidance] = useState("");
   const [setupMd, setSetupMd] = useState("");
@@ -60,7 +55,11 @@ export function SetupDiscovery({
   const [messages, setMessages] = useState<SessionMessage[]>([]);
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [cost, setCost] = useState<{ totalUsd: number; inputTokens: number; outputTokens: number } | null>(null);
+  const [cost, setCost] = useState<{
+    totalUsd: number;
+    inputTokens: number;
+    outputTokens: number;
+  } | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentAssistantContentRef = useRef<string>("");
@@ -108,114 +107,116 @@ export function SetupDiscovery({
   /**
    * Handle individual stream events
    */
-  const handleStreamEvent = useCallback((event: any) => {
-    switch (event.type) {
-      case "session_created":
-        setSessionId(event.sessionId);
-        setStatus("streaming");
-        break;
+  const handleStreamEvent = useCallback(
+    (event: any) => {
+      switch (event.type) {
+        case "session_created":
+          setSessionId(event.sessionId);
+          setStatus("streaming");
+          break;
 
-      case "init":
-        // Session initialized
-        break;
+        case "init":
+          // Session initialized
+          break;
 
-      case "assistant": {
-        const { text, toolUses, partial } = event.content || {};
+        case "assistant": {
+          const { text, toolUses, partial } = event.content || {};
 
-        if (partial && text) {
-          // Accumulate partial text
-          currentAssistantContentRef.current += text;
+          if (partial && text) {
+            // Accumulate partial text
+            currentAssistantContentRef.current += text;
 
-          setMessages((prev) => {
-            const existingIdx = prev.findIndex(
-              (m) => m.role === "assistant" && m.isPartial,
-            );
+            setMessages((prev) => {
+              const existingIdx = prev.findIndex((m) => m.role === "assistant" && m.isPartial);
 
-            if (existingIdx >= 0) {
-              const updated = [...prev];
-              updated[existingIdx] = {
-                ...updated[existingIdx],
-                content: currentAssistantContentRef.current,
-              };
-              return updated;
-            } else {
-              return [
-                ...prev,
-                {
-                  id: `assistant_${Date.now()}`,
-                  role: "assistant",
+              if (existingIdx >= 0) {
+                const updated = [...prev];
+                updated[existingIdx] = {
+                  ...updated[existingIdx],
                   content: currentAssistantContentRef.current,
-                  isPartial: true,
+                };
+                return updated;
+              } else {
+                return [
+                  ...prev,
+                  {
+                    id: `assistant_${Date.now()}`,
+                    role: "assistant",
+                    content: currentAssistantContentRef.current,
+                    isPartial: true,
+                    timestamp: new Date(),
+                  },
+                ];
+              }
+            });
+          } else if (text || toolUses?.length) {
+            // Complete assistant message
+            currentAssistantContentRef.current = "";
+
+            setMessages((prev) => {
+              const filtered = prev.filter((m) => !m.isPartial);
+              return [
+                ...filtered,
+                {
+                  id: event.messageId || `assistant_${Date.now()}`,
+                  role: "assistant",
+                  content: text || "",
+                  toolUses,
+                  isPartial: false,
                   timestamp: new Date(),
                 },
               ];
+            });
+          }
+          break;
+        }
+
+        case "result": {
+          // A turn completed, but session may still be open
+          const { cost: resultCost } = event.content || {};
+          if (resultCost) {
+            setCost(resultCost);
+          }
+
+          // Check if we got the setup files in the last message
+          const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
+          if (lastAssistant) {
+            const files = parseSetupFiles(lastAssistant.content);
+            if (files) {
+              setSetupMd(files.setupMd);
+              setSetupSh(files.setupSh);
             }
-          });
-        } else if (text || toolUses?.length) {
-          // Complete assistant message
-          currentAssistantContentRef.current = "";
-
-          setMessages((prev) => {
-            const filtered = prev.filter((m) => !m.isPartial);
-            return [
-              ...filtered,
-              {
-                id: event.messageId || `assistant_${Date.now()}`,
-                role: "assistant",
-                content: text || "",
-                toolUses,
-                isPartial: false,
-                timestamp: new Date(),
-              },
-            ];
-          });
-        }
-        break;
-      }
-
-      case "result": {
-        // A turn completed, but session may still be open
-        const { cost: resultCost } = event.content || {};
-        if (resultCost) {
-          setCost(resultCost);
+          }
+          break;
         }
 
-        // Check if we got the setup files in the last message
-        const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
-        if (lastAssistant) {
-          const files = parseSetupFiles(lastAssistant.content);
+        case "turn_complete": {
+          // Turn is done, we're waiting for user input or completion
+          setStatus("waiting");
+
+          // Check for setup files in all messages
+          const allContent = messages
+            .filter((m) => m.role === "assistant")
+            .map((m) => m.content)
+            .join("\n\n");
+          const files = parseSetupFiles(allContent);
           if (files) {
             setSetupMd(files.setupMd);
             setSetupSh(files.setupSh);
+            setPhase("review");
           }
+          break;
         }
-        break;
+
+        case "error":
+          setSetupError(event.content?.message || event.error || "Unknown error");
+          setStatus("error");
+          setPhase("error");
+          break;
       }
-
-      case "turn_complete":
-        // Turn is done, we're waiting for user input or completion
-        setStatus("waiting");
-
-        // Check for setup files in all messages
-        const allContent = messages
-          .filter((m) => m.role === "assistant")
-          .map((m) => m.content)
-          .join("\n\n");
-        const files = parseSetupFiles(allContent);
-        if (files) {
-          setSetupMd(files.setupMd);
-          setSetupSh(files.setupSh);
-          setPhase("review");
-        }
-        break;
-
-      case "error":
-        setSetupError(event.content?.message || event.error || "Unknown error");
-        setStatus("error");
-        setPhase("error");
-        break;
-    }
-  }, [messages]);
+    },
+    [messages],
+  );
 
   /**
    * Start discovery
@@ -433,10 +434,7 @@ export function SetupDiscovery({
           </div>
 
           <div className="flex gap-2">
-            <Button
-              onClick={startDiscovery}
-              className="bg-orange-600 hover:bg-orange-700"
-            >
+            <Button onClick={startDiscovery} className="bg-orange-600 hover:bg-orange-700">
               Start Discovery
             </Button>
             {onCancel && (
@@ -489,9 +487,7 @@ export function SetupDiscovery({
       <div className="space-y-4">
         <div
           className={`border rounded-lg p-4 ${
-            actionInfo
-              ? "border-yellow-500 bg-yellow-950/30"
-              : "border-red-500 bg-red-950/30"
+            actionInfo ? "border-yellow-500 bg-yellow-950/30" : "border-red-500 bg-red-950/30"
           }`}
         >
           <h3
@@ -501,11 +497,7 @@ export function SetupDiscovery({
           >
             {actionInfo ? "Action Required" : "Discovery Failed"}
           </h3>
-          <p
-            className={`text-sm mb-4 ${
-              actionInfo ? "text-yellow-200" : "text-red-300"
-            }`}
-          >
+          <p className={`text-sm mb-4 ${actionInfo ? "text-yellow-200" : "text-red-300"}`}>
             {setupError}
           </p>
           <div className="flex gap-2">
@@ -536,17 +528,13 @@ export function SetupDiscovery({
   return (
     <div className="space-y-4">
       <div className="border border-green-500 bg-green-950/30 rounded-lg p-4">
-        <h3 className="text-lg font-semibold mb-2 text-green-400">
-          ✓ Discovery Complete
-        </h3>
+        <h3 className="text-lg font-semibold mb-2 text-green-400">✓ Discovery Complete</h3>
         <p className="text-sm text-green-300">
-          Setup files have been generated. Review and edit them below before
-          approving.
+          Setup files have been generated. Review and edit them below before approving.
         </p>
         {cost && (
           <p className="text-xs text-muted-foreground mt-2">
-            Cost: ${cost.totalUsd.toFixed(4)} (
-            {cost.inputTokens.toLocaleString()} input,{" "}
+            Cost: ${cost.totalUsd.toFixed(4)} ({cost.inputTokens.toLocaleString()} input,{" "}
             {cost.outputTokens.toLocaleString()} output tokens)
           </p>
         )}
@@ -561,11 +549,7 @@ export function SetupDiscovery({
         <TabsContent value="setupMd" className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="setupMd">Setup Documentation</Label>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsEditing(!isEditing)}
-            >
+            <Button variant="outline" size="sm" onClick={() => setIsEditing(!isEditing)}>
               {isEditing ? "Lock" : "Edit"}
             </Button>
           </div>
@@ -581,11 +565,7 @@ export function SetupDiscovery({
         <TabsContent value="setupSh" className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="setupSh">Setup Script</Label>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsEditing(!isEditing)}
-            >
+            <Button variant="outline" size="sm" onClick={() => setIsEditing(!isEditing)}>
               {isEditing ? "Lock" : "Edit"}
             </Button>
           </div>

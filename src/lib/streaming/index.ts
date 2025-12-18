@@ -5,8 +5,8 @@
  */
 
 export {
-  tokenize,
+  createWordStreamResponse,
   streamTextTokens,
   streamTextToSSE,
-  createWordStreamResponse,
+  tokenize,
 } from "./text-chunker";

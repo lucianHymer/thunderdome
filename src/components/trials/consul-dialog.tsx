@@ -18,10 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  InteractiveSession,
-  type QuickAction,
-} from "@/components/ui/interactive-session";
+import { InteractiveSession, type QuickAction } from "@/components/ui/interactive-session";
 import type { SessionMessage, SessionStatus } from "@/hooks/use-interactive-session";
 
 interface Verdict {
@@ -61,12 +58,7 @@ function ConsulMessage({ message }: { message: SessionMessage }) {
   );
 }
 
-export function ConsulDialog({
-  open,
-  onOpenChange,
-  trialId,
-  verdict,
-}: ConsulDialogProps) {
+export function ConsulDialog({ open, onOpenChange, trialId, verdict }: ConsulDialogProps) {
   const [messages, setMessages] = useState<SessionMessage[]>([]);
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -111,9 +103,7 @@ export function ConsulDialog({
                 accumulatedContent += parsed.text;
                 // Update the message
                 setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === messageId ? { ...m, content: accumulatedContent } : m,
-                  ),
+                  prev.map((m) => (m.id === messageId ? { ...m, content: accumulatedContent } : m)),
                 );
               } else if (parsed.type === "error") {
                 throw new Error(parsed.message || "Unknown error");
@@ -251,9 +241,7 @@ export function ConsulDialog({
             <span className="text-2xl">⚖️</span>
             <span>Consul</span>
           </DialogTitle>
-          <DialogDescription>
-            Discuss the verdict and execute decree actions
-          </DialogDescription>
+          <DialogDescription>Discuss the verdict and execute decree actions</DialogDescription>
         </DialogHeader>
 
         {/* Verdict Summary Header */}
@@ -272,9 +260,7 @@ export function ConsulDialog({
           variant="purple"
           assistantLabel="Consul"
           quickActions={quickActions}
-          renderMessage={(message) => (
-            <ConsulMessage key={message.id} message={message} />
-          )}
+          renderMessage={(message) => <ConsulMessage key={message.id} message={message} />}
           className="flex-1 min-h-0"
         />
       </DialogContent>

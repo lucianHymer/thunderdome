@@ -78,7 +78,9 @@ export function ClaudeTokenForm({ hasToken: initialHasToken }: ClaudeTokenFormPr
       {message && (
         <div
           className={`p-3 rounded ${
-            message.type === "success" ? "bg-green-900/50 text-green-300 border border-green-700" : "bg-red-900/50 text-red-300 border border-red-700"
+            message.type === "success"
+              ? "bg-green-900/50 text-green-300 border border-green-700"
+              : "bg-red-900/50 text-red-300 border border-red-700"
           }`}
         >
           {message.text}

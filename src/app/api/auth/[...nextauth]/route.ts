@@ -11,9 +11,8 @@
  */
 
 import { cookies } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
-import { handlers } from "@/lib/auth";
-import { auth } from "@/lib/auth";
+import { type NextRequest, NextResponse } from "next/server";
+import { auth, handlers } from "@/lib/auth";
 import { processInstallation } from "@/lib/github/installation";
 
 const { GET: nextAuthGet, POST } = handlers;
@@ -35,7 +34,9 @@ async function GET(request: NextRequest) {
 
     if (session?.user?.id) {
       // User is already logged in - process installation directly
-      console.log(`[Auth] Processing installation ${installationId} for logged-in user ${session.user.id}`);
+      console.log(
+        `[Auth] Processing installation ${installationId} for logged-in user ${session.user.id}`,
+      );
       await processInstallation(session.user.id, parseInt(installationId, 10), setupAction);
 
       // Redirect to home with success message

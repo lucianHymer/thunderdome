@@ -196,8 +196,8 @@ export function NewTrialForm() {
         {selectedRepo && setupStatus === "missing" && !showSetupDiscovery && (
           <div className="mt-3 border border-yellow-500/50 bg-yellow-950/20 rounded-lg p-4">
             <p className="text-sm text-yellow-200 mb-3">
-              This repository needs setup discovery before starting a code battle.
-              Claude will analyze the repo and create setup scripts.
+              This repository needs setup discovery before starting a code battle. Claude will
+              analyze the repo and create setup scripts.
             </p>
             <Button
               type="button"

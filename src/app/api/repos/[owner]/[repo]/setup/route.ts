@@ -10,18 +10,14 @@
  * - action: "stop" - Close session and cleanup
  */
 
+import { type Query, query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { exec } from "child_process";
+import { eq } from "drizzle-orm";
 import { mkdir, rm } from "fs/promises";
+import { type NextRequest, NextResponse } from "next/server";
 import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
-import {
-  query,
-  type Query,
-  type SDKMessage,
-} from "@anthropic-ai/claude-agent-sdk";
-import { eq } from "drizzle-orm";
-import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { repoSetups, users } from "@/db/schema";
 import { decrypt } from "@/lib/encryption";
@@ -31,8 +27,7 @@ import { SETUP_DISCOVERY_SYSTEM_PROMPT } from "@/lib/setup/prompts";
 
 const execAsync = promisify(exec);
 
-const CLAUDE_CLI_PATH =
-  process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
+const CLAUDE_CLI_PATH = process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
 
 /**
  * Active setup sessions with their temp directories
@@ -54,15 +49,18 @@ const activeSessions = new Map<string, SetupSession>();
 
 // Clean up stale sessions every 5 minutes
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, data] of activeSessions.entries()) {
-    if (now - data.lastActivityAt.getTime() > SESSION_TIMEOUT_MS) {
-      console.log(`[Setup Session] Cleaning up stale session: ${id}`);
-      cleanupSession(id);
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [id, data] of activeSessions.entries()) {
+      if (now - data.lastActivityAt.getTime() > SESSION_TIMEOUT_MS) {
+        console.log(`[Setup Session] Cleaning up stale session: ${id}`);
+        cleanupSession(id);
+      }
     }
-  }
-}, 5 * 60 * 1000);
+  },
+  5 * 60 * 1000,
+);
 
 /**
  * Cleanup a session and its temp directory
@@ -194,11 +192,7 @@ function createSSEResponse(stream: ReadableStream): NextResponse {
 /**
  * Send SSE event helper
  */
-function sendSSE(
-  controller: ReadableStreamDefaultController,
-  encoder: TextEncoder,
-  event: any,
-) {
+function sendSSE(controller: ReadableStreamDefaultController, encoder: TextEncoder, event: any) {
   controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
 }
 
@@ -385,7 +379,9 @@ async function handleStart({
     console.error("[Setup Discovery] Clone failed:", cloneError);
     await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     return NextResponse.json(
-      { error: `Failed to clone repository: ${cloneError instanceof Error ? cloneError.message : "Unknown error"}` },
+      {
+        error: `Failed to clone repository: ${cloneError instanceof Error ? cloneError.message : "Unknown error"}`,
+      },
       { status: 500 },
     );
   }
@@ -539,7 +535,10 @@ async function handleSend({
   }
 
   if (!sessionData.sdkSessionId) {
-    return NextResponse.json({ error: "Session not ready - SDK session ID not captured" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Session not ready - SDK session ID not captured" },
+      { status: 400 },
+    );
   }
 
   sessionData.lastActivityAt = new Date();

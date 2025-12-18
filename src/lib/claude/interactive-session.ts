@@ -7,16 +7,15 @@
  */
 
 import {
-  unstable_v2_createSession,
-  type SDKSession,
+  type Options,
   type SDKMessage,
   type SDKResultMessage,
-  type Options,
+  type SDKSession,
+  unstable_v2_createSession,
 } from "@anthropic-ai/claude-agent-sdk";
 
 // Use system-installed Claude CLI
-const CLAUDE_CLI_PATH =
-  process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
+const CLAUDE_CLI_PATH = process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
 
 /**
  * Configuration for creating an interactive session
@@ -56,16 +55,19 @@ const activeSessions = new Map<
 
 // Clean up stale sessions every 5 minutes
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, data] of activeSessions.entries()) {
-    if (now - data.lastActivityAt.getTime() > SESSION_TIMEOUT_MS) {
-      console.log(`[InteractiveSession] Cleaning up stale session: ${id}`);
-      data.session.close();
-      activeSessions.delete(id);
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [id, data] of activeSessions.entries()) {
+      if (now - data.lastActivityAt.getTime() > SESSION_TIMEOUT_MS) {
+        console.log(`[InteractiveSession] Cleaning up stale session: ${id}`);
+        data.session.close();
+        activeSessions.delete(id);
+      }
     }
-  }
-}, 5 * 60 * 1000);
+  },
+  5 * 60 * 1000,
+);
 
 /**
  * Creates a new interactive session
@@ -137,7 +139,15 @@ export function closeSession(sessionId: string): void {
  * Processes SDK messages into a normalized format for streaming
  */
 export interface StreamableMessage {
-  type: "init" | "assistant" | "user" | "tool_use" | "tool_result" | "thinking" | "result" | "error";
+  type:
+    | "init"
+    | "assistant"
+    | "user"
+    | "tool_use"
+    | "tool_result"
+    | "thinking"
+    | "result"
+    | "error";
   content: any;
   timestamp: Date;
   messageId?: string;

@@ -711,3 +711,392 @@ If repo URL present, would:
 **Files**: src/hooks/use-trial-stream.ts, src/hooks/use-gladiator-stream.ts, src/hooks/use-trial-phases.ts, src/components/trials/consul-dialog.tsx, src/app/api/trials/[id]/stream/route.ts, src/app/api/gladiators/[id]/stream/route.ts, src/app/api/trials/[id]/consul/route.ts
 ---
 
+### [18:06] [architecture] Trial Execution Architecture - Multi-Agent Competitive Problem Solving
+**Details**: Thunderdome implements a sophisticated multi-agent trial execution system with the following core flow:
+
+1. **Trial Creation**: Users create a trial with a challenge prompt and optional GitHub repo URL
+
+2. **Lanista Phase (Planning)**: 
+   - Claude Opus designs 2-6 gladiators with different personas/perspectives
+   - Each gladiator gets unique: system prompt, temperature, tool access, model version
+   - Uses structured output (LanistaOutputSchema) with reasoning
+   - Stores plan in database (lanistaPlan JSON field)
+
+3. **Gladiators Phase (Parallel Execution)**:
+   - All gladiators run in parallel using Claude Agent SDK
+   - Each runs independently with own config (model, temp, tools)
+   - Supports different trial modes: GLADIATOR (simple) and LEGION (complex)
+   - Real-time streaming via SSE broadcast to UI
+   - Results stored in gladiators table with full response content and stream logs
+   - Default 30-minute timeout per gladiator, max 25 turns
+   - On completion, generates Haiku summary of each gladiator's work
+
+4. **Arbiter Phase (Judge Design)**:
+   - Claude Opus analyzes all gladiator outputs
+   - Designs 2-4 specialized judges based on what gladiators produced
+   - Each judge has: name, focus area, evaluation criteria
+   - Uses structured output (ArbiterOutputSchema)
+   - Can reuse existing judges if trial is resumed
+
+5. **Judges Phase (Evaluation)**:
+   - All judges run in parallel
+   - Each evaluates all gladiator responses from their perspective
+   - Uses structured output (JudgeOutputSchema)
+   - Generates rankings and detailed evaluations per gladiator
+
+6. **Verdict Synthesis**:
+   - Aggregates judge evaluations into final verdict
+   - Identifies winner, scores, strengths/weaknesses
+   - Stores verdict in verdicts table
+
+7. **Optional Code Battle Mode** (currently not fully implemented):
+   - Spins up ephemeral Docker container per trial
+   - Clones repo into container, runs setup.sh
+   - Creates git worktrees per gladiator for isolated code changes
+   - Pushes branches to user's repo after completion
+   - Container auto-destroyed after 30 minutes
+
+Architecture uses:
+- SQLite database with structured tables (trials, gladiators, judges, verdicts, decrees)
+- Server-Sent Events (SSE) for real-time streaming to frontend
+- State machine for trial progression with valid transitions
+- Background task execution (fire-and-forget from API endpoints)
+- Claude Agent SDK for agent execution with streaming
+- Dockerode for container management (not currently integrated into flow)
+
+**Files**: /workspace/project/src/lib/trial/lanista/index.ts, /workspace/project/src/lib/trial/gladiators/index.ts, /workspace/project/src/lib/trial/arbiter/index.ts, /workspace/project/src/lib/trial/judges/index.ts, /workspace/project/src/lib/trial/state.ts, /workspace/project/src/app/api/trials/[id]/start/route.ts
+---
+
+### [18:06] [docker] Docker Integration - Container Management for Code Battles
+**Details**: The codebase has Docker integration for sandboxed trial execution, primarily for Code Battle mode (not yet fully implemented):
+
+**Docker Client Setup**:
+- Uses Dockerode library (npm package)
+- Singleton pattern in /src/lib/docker/client.ts
+- getDockerClient() returns shared Docker instance
+- isDockerAvailable() checks daemon connectivity via ping()
+
+**Container Creation** (/src/lib/docker/container.ts):
+- Creates ephemeral containers per trial with ID like "trial-{trialId}"
+- Security constraints:
+  - Memory limit: 2GB (configurable)
+  - CPU limit: 1 core (configurable)
+  - No privilege escalation (no-new-privileges)
+  - Minimal Linux capabilities (CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID only)
+  - Other capabilities dropped (CapDrop: ["ALL"])
+  - No swap memory allowed
+- Default image: node:20-alpine (configurable)
+- Auto-pull image if not present locally
+- Auto-destroy after 30-minute timeout
+- Auto-remove: false (manual cleanup)
+- Labels for tracking: thunderdome.trial-id, thunderdome.created-at
+
+**Container Operations** (/src/lib/docker/container.ts):
+- exec(cmd): Execute command, capture stdout/stderr, get exit code
+- execStream(cmd): Stream command output for real-time monitoring
+- copyFileIn/copyFileOut: Transfer files via tar archives
+- destroy(): Stop and remove container
+- Properly demultiplexes Docker's combined stdout/stderr streams
+
+**Container Service** (/src/lib/trial/container-service.ts):
+- In-memory registry: Map<trialId, TrialContainer>
+- startTrialContainer(trialId): Create and register
+- getTrialContainer(trialId): Retrieve from registry
+- destroyTrialContainer(trialId): Cleanup and deregister
+- runSetupInContainer(trialId, commands): Execute setup script
+- cleanupAllContainers(): Graceful shutdown
+
+**Code Battle Orchestration** (/src/lib/trial/code-battle/orchestrator.ts):
+- Currently NOT FULLY IMPLEMENTED (has @ts-nocheck and throws error)
+- Planned flow:
+  1. Start container
+  2. Run setup script (setup.sh from repo)
+  3. Run gladiators in parallel inside container
+  4. Push all worktree branches to repo
+  5. Destroy container in finally block
+- Broadcasting container status updates via SSE
+
+**Health Monitoring** (/src/lib/docker/health.ts):
+- checkDockerHealth(): Returns availability, container count, memory usage
+- Used by /api/admin/health endpoint
+- Catches errors gracefully
+
+Note: Code Battle and Docker integration are designed but not fully operational. Current implementation focuses on classic trial mode (Lanista → Gladiators → Arbiter → Judges).
+**Files**: /workspace/project/src/lib/docker/client.ts, /workspace/project/src/lib/docker/container.ts, /workspace/project/src/lib/docker/health.ts, /workspace/project/src/lib/trial/container-service.ts, /workspace/project/src/lib/trial/code-battle/orchestrator.ts
+---
+
+### [18:06] [workflow] Trial State Machine and Transitions
+**Details**: Trial state machine in /src/lib/trial/state.ts manages flow:
+
+**Valid States**:
+- pending: Trial created, not started
+- lanista_designing: Lanista designing gladiators
+- battling: Gladiators running (but called "running" in status)
+- arbiter_designing: Arbiter designing judges
+- judging: Judges running
+- decree: Verdict synthesized, awaiting user action
+- complete: Trial finished
+- failed: Error occurred
+
+**Status to Phase Mapping**:
+- PENDING → pending
+- PLANNING → lanista_designing
+- RUNNING → battling
+- JUDGING → arbiter_designing/judging
+- COMPLETED → decree/complete
+- FAILED → failed
+
+**Valid Transitions**:
+- pending → [pending, lanista_designing, failed]
+- lanista_designing → [lanista_designing, battling, failed]
+- battling → [battling, arbiter_designing, failed]
+- arbiter_designing → [arbiter_designing, judging, failed]
+- judging → [judging, decree, failed]
+- decree → [decree, complete, failed]
+- complete → [] (terminal)
+- failed → [failed, lanista_designing, battling, arbiter_designing, judging] (recoverable for resume)
+
+**Resume Capability**:
+- Failed trials can resume from appropriate phase
+- Logic in /src/app/api/trials/[id]/resume/route.ts:
+  - If no gladiators created: resume from lanista
+  - If incomplete gladiators: resume from gladiators
+  - If missing verdict: resume from arbiter
+- Resume endpoint is POST /api/trials/{id}/resume
+
+**Broadcasting**:
+- Each state change broadcasts via SSE with state, status, timestamp
+- Subscribers receive real-time updates for UI rendering
+
+**Files**: /workspace/project/src/lib/trial/state.ts, /workspace/project/src/app/api/trials/[id]/resume/route.ts
+---
+
+### [18:06] [api] Trial Execution API Endpoints
+**Details**: Key API endpoints for trial execution:
+
+**POST /api/trials/:id/start**:
+- Starts trial execution (Lanista → Gladiators → Arbiter → Judges)
+- Validates trial ownership and status (must be PENDING)
+- Routes to Code Battle if repo URL exists, else Classic mode
+- Code Battle checks for existing setup (requires Setup Discovery first)
+- Runs background task sequence:
+  1. runLanista(trialId, claudeToken, statusCallback)
+  2. runGladiators(trialId, claudeToken)
+  3. runArbiter(trialId, claudeToken, statusCallback)
+- Returns immediately with 200, execution continues in background
+- Broadcasts progress via SSE to subscribed clients
+
+**POST /api/trials/:id/resume**:
+- Resumes failed/stuck trial from where it left off
+- Validates trial ownership
+- Intelligently determines resume point:
+  - If PENDING or no gladiators: restart from lanista
+  - If PLANNING/RUNNING with incomplete gladiators: resume from gladiators
+  - If JUDGING or all gladiators done: resume from arbiter
+- Runs background task from determined point onwards
+- Returns immediately, broadcasts progress
+
+**GET /api/trials/:id/stream**:
+- Server-Sent Events endpoint for real-time trial updates
+- Subscribes client to trial updates
+- Broadcasts events from background tasks (lanista_thinking, gladiator_started, etc.)
+- Unsubscribes on client disconnect
+
+**GET /api/trials/:id/stream** (gladiator variant):
+- GET /api/gladiators/:id/stream for individual gladiator live updates
+- Streams agent SDK events for single gladiator
+
+**POST /api/trials/:id/consul**:
+- Post-verdict dialogue endpoint
+- User can discuss results, ask clarifications, request combinations
+- Consul has access to challenge, gladiator outputs, judge evals, verdict, repo
+
+**GET /api/trials/:id/export**:
+- Export trial results as markdown report
+- Includes all gladiator outputs, judge evals, verdict
+
+**POST /api/trials**:
+- Create new trial
+- Takes: challengePrompt, trialType, optional repoUrl
+- Returns trial ID
+
+**GET /api/trials/:id**:
+- Get trial details and status
+- Returns full trial data for UI display
+
+**Background Execution Pattern**:
+- All background work is fire-and-forget from API endpoint
+- Uses async IIFE: `(async () => { await runLanista(...); await runGladiators(...); ... })()`
+- Errors broadcast back via SSE
+- State transitions happen during execution
+- Database updated continuously for persistence
+
+**Files**: /workspace/project/src/app/api/trials/[id]/start/route.ts, /workspace/project/src/app/api/trials/[id]/resume/route.ts
+---
+
+### [18:06] [pattern] Gladiator Execution Pattern - Parallel Agent Orchestration
+**Details**: Gladiator execution in /src/lib/trial/gladiators/index.ts follows a sophisticated pattern:
+
+**Execution Flow**:
+1. runGladiators(trialId, oauthToken) - main entry point
+   - Fetches trial and all gladiator records from DB
+   - Broadcasts battle_started event
+   - Maps each gladiator to async Promise via Promise.all()
+   - Waits for all with Promise.allSettled() (doesn't fail on individual errors)
+   - Aggregates costs and broadcasts battle_completed
+   - Transitions trial to arbiter_designing state
+   - Runs arbiter (dynamic import to avoid circular deps)
+
+2. runSingleGladiator(gladiator, trial, token, workDir, repoContext):
+   - Mark gladiator RUNNING in DB
+   - Broadcast gladiator_started event
+   - Parse tools from JSON
+   - Build system prompt based on trial type (with or without repo context)
+   - Build user prompt (generic "respond to challenge")
+   - Configure agent: model, temp, maxTurns, tools, cwd, permissionMode
+   - Call runAgent() from Claude SDK - returns async generator
+   - Stream events:
+     * Broadcast each agent event to individual gladiator subscribers (SSE)
+     * Broadcast summary events to trial subscribers
+   - Collect all StreamEvent[] from generator
+   - Extract final "result" event - contains success, content, usage, duration
+   - Generate Haiku summary of output (non-blocking)
+   - Store in DB: status, responseContent, responseSummary, streamLog
+   - Broadcast gladiator_completed or gladiator_failed
+   - Return AgentResult object
+
+**Timeout & Error Handling**:
+- withTimeout() wrapper: 30 min default, custom configurable
+- Throws TimeoutError if exceeded
+- Try/catch logs errors, broadcasts failure, stores error in DB
+- Ensures clean shutdown even on timeout
+
+**Streaming Integration**:
+- Uses broadcastTrialUpdate() and broadcastGladiatorUpdate() for SSE
+- Events flow in real-time to UI without waiting for completion
+- SSE subscribers get: gladiator_started, gladiator_progress, gladiator_completed
+
+**Cost Tracking**:
+- Each AgentResult includes: totalUsd, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens
+- Aggregates costs across all gladiators
+- Broadcasts total cost in battle_completed event
+
+**Parallelism**:
+- All gladiators run simultaneously via Promise.all()
+- Leverages same user's Claude token across multiple sessions
+- Manages up to N parallel agents (tested with 3-6)
+
+**Database Persistence**:
+- Stores full streamLog as JSON (all events with timestamps)
+- Stores responseContent (full markdown output)
+- Stores responseSummary (1-2 sentence Haiku-generated summary)
+- Allows UI to replay stream or display summary
+- State transitions allow resume from this point
+
+**Files**: /workspace/project/src/lib/trial/gladiators/index.ts, /workspace/project/src/lib/trial/broadcast.ts
+---
+
+### [18:06] [database] Database Schema for Trial Execution
+**Details**: SQLite schema supports full trial lifecycle:
+
+**trials table**:
+- id (UUID, PK): Unique trial identifier
+- userId (FK): Owner of trial
+- repoUrl (nullable): For code battles
+- challengePrompt: User's challenge text
+- trialType: ENUM [GLADIATOR, LEGION]
+- status: ENUM [PENDING, PLANNING, RUNNING, JUDGING, COMPLETED, FAILED] (display)
+- phase: ENUM [pending, lanista_designing, battling, arbiter_designing, judging, decree, complete, failed] (state machine)
+- lanistaPlan: JSON string with reasoning, gladiators array, cost
+- arbiterPlan: JSON string with reasoning, judges array, cost
+- createdAt, completedAt: Timestamps
+
+**gladiators table**:
+- id (UUID, PK): Unique gladiator identifier
+- trialId (FK): Parent trial
+- name: Gladiator's display name
+- persona: System prompt text
+- model: e.g., "claude-opus-4.5", "claude-sonnet-4.5"
+- temperature: Integer 0-100 (stored as 100x for precision)
+- tools: JSON string array of tool names
+- branchName: For code battles, git branch name
+- status: ENUM [PENDING, RUNNING, COMPLETED, FAILED]
+- responseContent: Full markdown response text
+- responseSummary: 1-2 sentence Haiku-generated summary
+- streamLog: JSON array of all SSE events with timestamps
+- createdAt: Timestamp
+
+**judges table**:
+- id (UUID, PK): Unique judge identifier
+- trialId (FK): Parent trial
+- name: Judge's display name
+- focus: What they evaluate (e.g., "code quality", "security")
+- model: Claude model used
+- evaluation: JSON string with evaluationCriteria array
+- createdAt: Timestamp
+
+**verdicts table**:
+- id (UUID, PK): Unique verdict identifier
+- trialId (FK, UNIQUE): One verdict per trial
+- summary: High-level verdict summary
+- winnerGladiatorId (FK, nullable): Winning gladiator
+- reasoning: Detailed explanation
+- createdAt: Timestamp
+
+**decrees table**:
+- id (UUID, PK): Unique decree identifier
+- trialId (FK): Parent trial
+- actionType: ENUM [MERGE, CLOSE_PR, CREATE_ISSUE, COMMENT]
+- actionDetails: JSON string with action specifics
+- consulConversation: JSON string of dialogue
+- createdAt: Timestamp
+
+**repoSetups table**:
+- id (UUID, PK): Unique setup identifier
+- userId (FK): User who ran setup
+- repoUrl (UNIQUE): Full repo URL
+- setupMd: Human-readable setup instructions
+- setupSh: Executable setup script
+- createdAt, updatedAt: Timestamps
+
+**githubAppInstallations table**:
+- Tracks GitHub App installations per user
+- installationId (UNIQUE): GitHub's installation ID
+- accountLogin, accountType: Who has the app
+- suspendedAt: If installation revoked
+
+**githubAppRepos table**:
+- Caches which repos are accessible via which GitHub App installation
+- For efficient repo listing without hitting GitHub API each time
+
+**Files**: /workspace/project/src/db/schema.ts
+---
+
+### [03:39] [architecture] Docker container agent server for code battles
+**Details**: Code battles now use a container-per-trial architecture with an HTTP agent server:
+
+1. Agent Server (packages/agent-server/):
+   - Hono HTTP server running inside Docker container on port 3000
+   - Manages multiple concurrent sessions (one per gladiator/judge)
+   - API: POST /sessions, POST /sessions/:id/message (SSE), DELETE /sessions/:id
+   - Wraps Claude Agent SDK, streams events back to host
+
+2. Container Setup:
+   - Image: thunderdome/agent-server:latest (build with npm run docker:build)
+   - Exposes port 3000, auto-mapped to random host port
+   - Contains: Node 20, Claude CLI, git, bash
+
+3. Host Integration:
+   - AgentServerClient (src/lib/docker/agent-client.ts) for HTTP communication
+   - TrialContainer.getAgentClient() returns client for that container
+   - TrialContainer.waitForAgentServer() waits for health check
+
+4. Code Battle Flow:
+   - Start container → wait for agent server → clone repo → run setup
+   - Create git worktree per gladiator
+   - Create session per gladiator on agent server
+   - Stream events back to SSE subscribers
+   - Commit changes, push branches, cleanup
+**Files**: packages/agent-server/src/server.ts, src/lib/docker/agent-client.ts, src/lib/docker/container.ts, src/lib/trial/code-battle/orchestrator.ts
+---
+

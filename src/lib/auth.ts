@@ -6,9 +6,9 @@
  */
 
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { cookies } from "next/headers";
 import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
-import { cookies } from "next/headers";
 import { db } from "@/db";
 import { accounts, sessions, users, verificationTokens } from "@/db/schema";
 import { processInstallation } from "@/lib/github/installation";
@@ -52,7 +52,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (pendingInstallation?.value && user.id) {
           const [installationId, setupAction] = pendingInstallation.value.split(":");
           if (installationId && setupAction) {
-            console.log(`[Auth] Processing pending installation ${installationId} for user ${user.id}`);
+            console.log(
+              `[Auth] Processing pending installation ${installationId} for user ${user.id}`,
+            );
             await processInstallation(user.id, parseInt(installationId, 10), setupAction);
             // Cookie will be cleared by expiry or we can clear it in middleware
           }
