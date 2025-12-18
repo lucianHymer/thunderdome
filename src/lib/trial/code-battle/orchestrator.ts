@@ -18,8 +18,8 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { gladiators, trials } from "@/db/schema";
+import type { TrialContainer } from "@/lib/docker/container";
 import { checkRepoAccess, getInstallationToken } from "@/lib/github/app";
-import { runSetupDiscoveryInContainer, writeSetupFilesToContainer } from "@/lib/setup/discovery";
 import { broadcastTrialUpdate } from "@/lib/trial/broadcast";
 import {
   destroyTrialContainer,
@@ -124,12 +124,28 @@ async function cloneRepository(
 }
 
 /**
- * Ensure setup exists (run discovery if needed) and execute setup script
+ * Check if setup.sh exists in the container
  */
-async function ensureAndRunSetup(
+async function checkSetupExists(trialId: string): Promise<boolean> {
+  const container = getTrialContainer(trialId);
+  if (!container) {
+    throw new Error("Container not found");
+  }
+
+  const { exitCode } = await container.exec([
+    "sh",
+    "-c",
+    "test -f /workspace/repo/.thunderdome/setup.sh",
+  ]);
+
+  return exitCode === 0;
+}
+
+/**
+ * Run the setup.sh script (assumes it exists)
+ */
+async function runSetupScript(
   trialId: string,
-  repoUrl: string,
-  claudeToken: string,
   onOutput?: (data: string) => void,
 ): Promise<boolean> {
   const container = getTrialContainer(trialId);
@@ -138,56 +154,6 @@ async function ensureAndRunSetup(
   }
 
   try {
-    // Check if setup script already exists
-    const { exitCode: checkCode } = await container.exec([
-      "sh",
-      "-c",
-      "test -f /workspace/repo/.thunderdome/setup.sh",
-    ]);
-
-    // If no setup script, run setup discovery
-    if (checkCode !== 0) {
-      if (onOutput) {
-        onOutput("No setup script found. Running setup discovery...");
-      }
-
-      await broadcastTrialUpdate(trialId, {
-        type: "container_status",
-        status: "discovering",
-        message: "Discovering project setup requirements...",
-      });
-
-      const discoveryResult = await runSetupDiscoveryInContainer(
-        container,
-        repoUrl,
-        claudeToken,
-        (event) => {
-          // Stream discovery progress
-          if (event.event === "assistant" && onOutput) {
-            const data = event.data as { content?: string };
-            if (data.content) {
-              onOutput(data.content);
-            }
-          }
-        },
-      );
-
-      if (!discoveryResult.success || !discoveryResult.files) {
-        if (onOutput) {
-          onOutput(`Setup discovery failed: ${discoveryResult.error || "Unknown error"}`);
-        }
-        return false;
-      }
-
-      // Write the setup files to the container
-      await writeSetupFilesToContainer(container, discoveryResult.files);
-
-      if (onOutput) {
-        onOutput("Setup discovery complete. Created setup.md and setup.sh");
-      }
-    }
-
-    // Now run the setup script
     if (onOutput) {
       onOutput("Running setup script...");
     }
@@ -331,14 +297,32 @@ export async function runCodeBattle(
       throw new Error("Failed to clone repository");
     }
 
-    // Run setup (will discover setup if needed)
+    // Check if setup.sh exists
+    const setupExists = await checkSetupExists(trialId);
+
+    if (!setupExists) {
+      // No setup.sh - transition to setup_discovery phase and wait for user
+      await transitionTrialState(trialId, "setup_discovery");
+
+      await broadcastTrialUpdate(trialId, {
+        type: "container_status",
+        status: "needs_setup",
+        message: "Repository needs setup configuration. Starting interactive setup discovery...",
+      });
+
+      // Return early - user will complete setup via /api/trials/:id/setup
+      // Then call continueAfterSetup() to resume
+      return;
+    }
+
+    // Setup exists - run it
     await broadcastTrialUpdate(trialId, {
       type: "container_status",
       status: "setup",
-      message: "Setting up project environment...",
+      message: "Running setup script...",
     });
 
-    const setupSuccess = await ensureAndRunSetup(trialId, trial.repoUrl, claudeToken, (data) => {
+    const setupSuccess = await runSetupScript(trialId, (data) => {
       broadcastTrialUpdate(trialId, {
         type: "setup_output",
         content: data,
@@ -346,87 +330,11 @@ export async function runCodeBattle(
     });
 
     if (!setupSuccess) {
-      throw new Error("Setup failed");
+      throw new Error("Setup script failed");
     }
 
-    // Get gladiators
-    const trialGladiators = await db.query.gladiators.findMany({
-      where: eq(gladiators.trialId, trialId),
-    });
-
-    if (trialGladiators.length === 0) {
-      throw new Error("No gladiators found for this trial");
-    }
-
-    // Run gladiators in parallel
-    await broadcastTrialUpdate(trialId, {
-      type: "battle_start",
-      message: "Gladiators entering the arena...",
-      gladiatorCount: trialGladiators.length,
-    });
-
-    const results = await Promise.allSettled(
-      trialGladiators.map((g) =>
-        runCodeBattleGladiator(
-          trialId,
-          g as GladiatorRecord,
-          trial.challengePrompt,
-          container,
-          claudeToken,
-        ),
-      ),
-    );
-
-    // Count successes/failures
-    const successCount = results.filter((r) => r.status === "fulfilled").length;
-    const failureCount = results.filter((r) => r.status === "rejected").length;
-
-    // Push branches
-    await broadcastTrialUpdate(trialId, {
-      type: "container_status",
-      status: "pushing",
-      message: "Pushing branches to repository...",
-    });
-
-    await pushBranches(trialId, (data) => {
-      broadcastTrialUpdate(trialId, {
-        type: "setup_output",
-        content: data,
-      });
-    });
-
-    await broadcastTrialUpdate(trialId, {
-      type: "battle_complete",
-      message: "All gladiators have submitted their work",
-      successCount,
-      failureCount,
-    });
-
-    // Proceed to Arbiter (runs in container with repo access)
-    await transitionTrialState(trialId, "arbiter_designing");
-
-    await broadcastTrialUpdate(trialId, {
-      type: "container_status",
-      status: "arbiter",
-      message: "Arbiter analyzing gladiator submissions...",
-    });
-
-    // Run arbiter with container access (arbiter also runs judges)
-    const { runArbiter } = await import("../arbiter");
-    await runArbiter(trialId, claudeToken, undefined, container);
-
-    // Container stays alive for Consul phase
-    // User can interact with Consul to merge/PR/etc.
-    // Container will be cleaned up by:
-    // - Consul explicitly ending it after decree
-    // - Idle timeout (30 min)
-    // - User cancellation
-
-    await broadcastTrialUpdate(trialId, {
-      type: "container_status",
-      status: "ready_for_consul",
-      message: "Trial complete. Container ready for Consul actions.",
-    });
+    // Continue to gladiators
+    await runGladiatorsAndBeyond(trialId, trial, container, claudeToken);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
@@ -445,5 +353,152 @@ export async function runCodeBattle(
 
     throw error;
   }
+  // Note: Container NOT destroyed here - stays alive for setup/consul
+}
+
+/**
+ * Continue code battle after setup discovery is complete
+ * Called when user finishes interactive setup
+ */
+export async function continueAfterSetup(trialId: string, claudeToken: string): Promise<void> {
+  try {
+    const trial = await db.query.trials.findFirst({
+      where: eq(trials.id, trialId),
+    });
+
+    if (!trial) {
+      throw new Error("Trial not found");
+    }
+
+    const container = getTrialContainer(trialId);
+    if (!container) {
+      throw new Error("Container not found. Trial may have timed out.");
+    }
+
+    // Run setup script
+    await broadcastTrialUpdate(trialId, {
+      type: "container_status",
+      status: "setup",
+      message: "Running setup script...",
+    });
+
+    const setupSuccess = await runSetupScript(trialId, (data) => {
+      broadcastTrialUpdate(trialId, {
+        type: "setup_output",
+        content: data,
+      });
+    });
+
+    if (!setupSuccess) {
+      throw new Error("Setup script failed");
+    }
+
+    // Continue to gladiators
+    await runGladiatorsAndBeyond(trialId, trial, container, claudeToken);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+    await broadcastTrialUpdate(trialId, {
+      type: "error",
+      phase: "code_battle",
+      message: errorMessage,
+    });
+
+    await transitionTrialState(trialId, "failed", { error: errorMessage });
+
+    // Cleanup container on error
+    await destroyTrialContainer(trialId);
+
+    throw error;
+  }
+}
+
+/**
+ * Run gladiators and everything after (arbiter, judges, verdict)
+ */
+async function runGladiatorsAndBeyond(
+  trialId: string,
+  trial: { challengePrompt: string; repoUrl: string | null },
+  container: TrialContainer,
+  claudeToken: string,
+): Promise<void> {
+  // Get gladiators
+  const trialGladiators = await db.query.gladiators.findMany({
+    where: eq(gladiators.trialId, trialId),
+  });
+
+  if (trialGladiators.length === 0) {
+    throw new Error("No gladiators found for this trial");
+  }
+
+  // Run gladiators in parallel
+  await broadcastTrialUpdate(trialId, {
+    type: "battle_start",
+    message: "Gladiators entering the arena...",
+    gladiatorCount: trialGladiators.length,
+  });
+
+  const results = await Promise.allSettled(
+    trialGladiators.map((g) =>
+      runCodeBattleGladiator(
+        trialId,
+        g as GladiatorRecord,
+        trial.challengePrompt,
+        container,
+        claudeToken,
+      ),
+    ),
+  );
+
+  // Count successes/failures
+  const successCount = results.filter((r) => r.status === "fulfilled").length;
+  const failureCount = results.filter((r) => r.status === "rejected").length;
+
+  // Push branches
+  await broadcastTrialUpdate(trialId, {
+    type: "container_status",
+    status: "pushing",
+    message: "Pushing branches to repository...",
+  });
+
+  await pushBranches(trialId, (data) => {
+    broadcastTrialUpdate(trialId, {
+      type: "setup_output",
+      content: data,
+    });
+  });
+
+  await broadcastTrialUpdate(trialId, {
+    type: "battle_complete",
+    message: "All gladiators have submitted their work",
+    successCount,
+    failureCount,
+  });
+
+  // Proceed to Arbiter (runs in container with repo access)
+  await transitionTrialState(trialId, "arbiter_designing");
+
+  await broadcastTrialUpdate(trialId, {
+    type: "container_status",
+    status: "arbiter",
+    message: "Arbiter analyzing gladiator submissions...",
+  });
+
+  // Run arbiter with container access (arbiter also runs judges)
+  const { runArbiter } = await import("../arbiter");
+  await runArbiter(trialId, claudeToken, undefined, container);
+
+  // Container stays alive for Consul phase
+  // User can interact with Consul to merge/PR/etc.
+  // Container will be cleaned up by:
+  // - Consul explicitly ending it after decree
+  // - Idle timeout (30 min)
+  // - User cancellation
+
+  await broadcastTrialUpdate(trialId, {
+    type: "container_status",
+    status: "ready_for_consul",
+    message: "Trial complete. Container ready for Consul actions.",
+  });
   // Note: Container NOT destroyed here - stays alive for Consul
 }

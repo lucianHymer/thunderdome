@@ -6,6 +6,27 @@ export type Model = "opus" | "sonnet" | "haiku";
 
 export type SessionStatus = "ready" | "streaming" | "ended";
 
+/**
+ * JSON Schema for structured output
+ */
+export interface JsonSchema {
+  type: string;
+  properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
+  required?: string[];
+  description?: string;
+  enum?: string[];
+  [key: string]: unknown;
+}
+
+/**
+ * Output format specification for structured output
+ */
+export interface OutputFormat {
+  type: "json_schema";
+  schema: JsonSchema;
+}
+
 export interface CreateSessionRequest {
   sessionId?: string;
   model: Model;
@@ -24,6 +45,7 @@ export interface CreateSessionResponse {
 export interface SendMessageRequest {
   content: string;
   oauthToken: string;
+  outputFormat?: OutputFormat;
 }
 
 export interface SessionInfo {
@@ -83,6 +105,7 @@ export interface DoneEvent {
   };
   turns: number;
   error?: string;
+  structuredOutput?: unknown;
 }
 
 export interface ErrorEvent {

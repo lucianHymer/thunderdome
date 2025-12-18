@@ -115,6 +115,7 @@ app.post("/sessions/:id/message", async (c) => {
         session,
         prompt: body.content,
         oauthToken: body.oauthToken,
+        outputFormat: body.outputFormat,
         onEvent: async (event) => {
           await stream.writeSSE({
             event: event.event,

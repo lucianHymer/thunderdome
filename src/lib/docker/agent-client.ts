@@ -7,6 +7,27 @@
 
 export type Model = "opus" | "sonnet" | "haiku";
 
+/**
+ * JSON Schema for structured output
+ */
+export interface JsonSchema {
+  type: string;
+  properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
+  required?: string[];
+  description?: string;
+  enum?: string[];
+  [key: string]: unknown;
+}
+
+/**
+ * Output format specification for structured output
+ */
+export interface OutputFormat {
+  type: "json_schema";
+  schema: JsonSchema;
+}
+
 export interface CreateSessionOptions {
   sessionId?: string;
   model: Model;
@@ -40,6 +61,7 @@ export interface DoneEventData {
   };
   turns: number;
   error?: string;
+  structuredOutput?: unknown;
 }
 
 /**
@@ -119,6 +141,7 @@ export class AgentServerClient {
    * @param content - The message content
    * @param oauthToken - OAuth token for authentication
    * @param onEvent - Callback for each SSE event
+   * @param outputFormat - Optional structured output format for this message
    * @returns Promise that resolves when streaming is complete
    */
   async sendMessage(
@@ -126,11 +149,12 @@ export class AgentServerClient {
     content: string,
     oauthToken: string,
     onEvent: (event: AgentEvent) => void | Promise<void>,
+    outputFormat?: OutputFormat,
   ): Promise<DoneEventData> {
     const response = await fetch(`${this.baseUrl}/sessions/${sessionId}/message`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content, oauthToken }),
+      body: JSON.stringify({ content, oauthToken, outputFormat }),
     });
 
     if (!response.ok) {

@@ -85,6 +85,7 @@ export const trials = sqliteTable("trials", {
     enum: [
       "pending",
       "lanista_designing",
+      "setup_discovery",
       "battling",
       "arbiter_designing",
       "judging",

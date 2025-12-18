@@ -19,6 +19,7 @@ export type TrialStatus = "PENDING" | "PLANNING" | "RUNNING" | "JUDGING" | "COMP
 export type TrialPhase =
   | "pending"
   | "lanista_designing"
+  | "setup_discovery"
   | "battling"
   | "arbiter_designing"
   | "judging"
@@ -30,6 +31,7 @@ export type TrialPhase =
 export const STATE_MAPPING: Record<TrialPhase, TrialStatus> = {
   pending: "PENDING",
   lanista_designing: "PLANNING",
+  setup_discovery: "PLANNING",
   battling: "RUNNING",
   arbiter_designing: "JUDGING",
   judging: "JUDGING",
@@ -42,14 +44,22 @@ export const STATE_MAPPING: Record<TrialPhase, TrialStatus> = {
 // Note: Each state can transition to itself (no-op for resume scenarios)
 // Failed state can recover to any earlier state for resume functionality
 const STATE_TRANSITIONS: Record<TrialPhase, TrialPhase[]> = {
-  pending: ["pending", "lanista_designing", "failed"],
-  lanista_designing: ["lanista_designing", "battling", "failed"],
+  pending: ["pending", "lanista_designing", "setup_discovery", "failed"],
+  lanista_designing: ["lanista_designing", "setup_discovery", "battling", "failed"],
+  setup_discovery: ["setup_discovery", "battling", "failed"],
   battling: ["battling", "arbiter_designing", "failed"],
   arbiter_designing: ["arbiter_designing", "judging", "failed"],
   judging: ["judging", "decree", "failed"],
   decree: ["decree", "complete", "failed"],
   complete: [],
-  failed: ["failed", "lanista_designing", "battling", "arbiter_designing", "judging"],
+  failed: [
+    "failed",
+    "lanista_designing",
+    "setup_discovery",
+    "battling",
+    "arbiter_designing",
+    "judging",
+  ],
 };
 
 // For backwards compatibility

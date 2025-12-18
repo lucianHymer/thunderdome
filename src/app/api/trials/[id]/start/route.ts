@@ -4,10 +4,10 @@
  * POST /api/trials/:id/start - Start the trial and kick off Lanista or Code Battle
  */
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { repoSetups, trials, users } from "@/db/schema";
+import { trials, users } from "@/db/schema";
 import { decrypt } from "@/lib/encryption";
 import { requireUser } from "@/lib/session";
 import { runArbiter } from "@/lib/trial/arbiter";
@@ -47,18 +47,6 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
     // Check if this is a code battle (repo URL exists)
     if (trial.repoUrl) {
-      // Check setup exists
-      const setup = await db.query.repoSetups.findFirst({
-        where: and(eq(repoSetups.userId, user.id), eq(repoSetups.repoUrl, trial.repoUrl)),
-      });
-
-      if (!setup) {
-        return NextResponse.json(
-          { error: "Repo setup required. Run Setup Discovery first." },
-          { status: 400 },
-        );
-      }
-
       // Get full user record from database for tokens
       const dbUser = await db.query.users.findFirst({
         where: eq(users.id, user.id),
@@ -75,6 +63,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       const claudeToken = decrypt(dbUser.claudeToken);
 
       // Run code battle in background
+      // Setup discovery runs in container if no setup.sh exists in repo
       runCodeBattle(trial.id, user.id, claudeToken).catch(console.error);
 
       return NextResponse.json({

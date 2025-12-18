@@ -7,7 +7,7 @@
 
 import { type Options, query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { setClaudeSessionId, updateSessionStatus } from "./sessions.js";
-import type { Session } from "./types.js";
+import type { OutputFormat, Session } from "./types.js";
 
 // Claude CLI path - installed in container
 const CLAUDE_CLI_PATH = process.env.CLAUDE_CLI_PATH || "/usr/local/bin/claude";
@@ -22,13 +22,14 @@ export interface RunOptions {
   prompt: string;
   oauthToken: string;
   onEvent: (event: StreamEvent) => void;
+  outputFormat?: OutputFormat;
 }
 
 /**
  * Run a Claude agent for a session and stream events
  */
 export async function runAgent(opts: RunOptions): Promise<void> {
-  const { session, prompt, oauthToken, onEvent } = opts;
+  const { session, prompt, oauthToken, onEvent, outputFormat } = opts;
 
   // Mark session as streaming
   updateSessionStatus(session.id, "streaming");
@@ -48,6 +49,8 @@ export async function runAgent(opts: RunOptions): Promise<void> {
       pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
       // Resume from previous conversation if we have a session ID
       ...(session.claudeSessionId && { resume: session.claudeSessionId }),
+      // Structured output format (optional)
+      ...(outputFormat && { outputFormat }),
     };
 
     const queryGen = query({ prompt, options });
@@ -85,6 +88,8 @@ export async function runAgent(opts: RunOptions): Promise<void> {
           },
           turns: result.num_turns || 0,
           error: result.is_error ? result.errors?.join(", ") || "Unknown error" : undefined,
+          // Include structured output if present
+          structuredOutput: result.structured_output,
         },
       });
     }
