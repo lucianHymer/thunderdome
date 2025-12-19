@@ -33,7 +33,7 @@ check_agent_server_image() {
 
 build_agent_server() {
     echo "🔨 Building agent-server..."
-    (cd "$AGENT_SERVER_DIR" && npm run build && docker build -t "$AGENT_IMAGE" .)
+    (cd "$AGENT_SERVER_DIR" && npm run build && docker build --platform linux/amd64 -t "$AGENT_IMAGE" .)
     echo "✅ agent-server image built"
 }
 
