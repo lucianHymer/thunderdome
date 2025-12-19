@@ -1,21 +1,20 @@
 /**
  * Consul Runner
  *
- * Runs the Consul AI inside a Docker container for post-verdict actions.
+ * Domain-specific helper functions for Consul AI operations.
  * The Consul has access to git tools for merging, creating PRs, etc.
  */
 
-import type { AgentEvent } from "@/lib/docker/agent-client";
-import { createAgentSessionManager } from "@/lib/discovery/agent-session";
+import type { TrialContainer } from "@/lib/docker/container";
 import { checkRepoAccess, getInstallationToken } from "@/lib/github/app";
 import {
   destroyTrialContainer,
   getTrialContainer,
   startTrialContainer,
 } from "../container-service";
-import { buildConsulContext, buildConsulSystemPrompt } from "./prompts";
+import { buildConsulSystemPrompt } from "./prompts";
 
-interface Gladiator {
+export interface Gladiator {
   id: string;
   name: string;
   persona: string;
@@ -23,40 +22,37 @@ interface Gladiator {
   branchName: string;
 }
 
-interface Judge {
+export interface Judge {
   id: string;
   name: string;
   focus: string;
   evaluation: string | null;
 }
 
-interface Verdict {
+export interface Verdict {
   summary: string;
   winnerGladiatorId: string | null;
   reasoning: string;
 }
 
-interface Trial {
+export interface Trial {
   id: string;
   challengePrompt: string;
   repoUrl: string | null;
   trialType: string;
 }
 
-interface ConsulContext {
+export interface ConsulContext {
   trial: Trial;
   gladiators: Gladiator[];
   judges: Judge[];
   verdict: Verdict;
 }
 
-// Create session manager with 10 minute idle timeout
-const consulSessionManager = createAgentSessionManager("consul", 10 * 60 * 1000);
-
 /**
  * Parse owner/repo from GitHub URL
  */
-function parseRepoFullName(repoUrl: string): string {
+export function parseRepoFullName(repoUrl: string): string {
   const httpsMatch = repoUrl.match(/github\.com\/([^/]+\/[^/.]+)/);
   if (httpsMatch) {
     return httpsMatch[1];
@@ -71,7 +67,7 @@ function parseRepoFullName(repoUrl: string): string {
 /**
  * Build authenticated git URL
  */
-function buildAuthenticatedUrl(repoUrl: string, token: string): string {
+export function buildAuthenticatedUrl(repoUrl: string, token: string): string {
   const url = new URL(repoUrl.endsWith(".git") ? repoUrl : `${repoUrl}.git`);
   url.username = "x-access-token";
   url.password = token;
@@ -79,20 +75,16 @@ function buildAuthenticatedUrl(repoUrl: string, token: string): string {
 }
 
 /**
- * Ensure container is set up with git repository and credentials
- * This is Consul-specific setup that runs before creating an agent session
+ * Ensure a Consul container exists and is set up with git credentials
+ * Reuses existing container if healthy, otherwise creates a new one
  */
-async function ensureConsulContainer(
+export async function ensureConsulContainer(
   trialId: string,
-  context: ConsulContext,
+  repoUrl: string,
   userId: string,
 ): Promise<void> {
-  if (!context.trial.repoUrl) {
-    throw new Error("Trial has no repository URL - cannot start Consul with git access");
-  }
-
   // Try to reuse existing trial container (from gladiator/arbiter phase)
-  let container = getTrialContainer(trialId);
+  let container: TrialContainer | undefined = getTrialContainer(trialId);
 
   if (container) {
     // Container exists - check if agent server is still healthy
@@ -108,7 +100,7 @@ async function ensureConsulContainer(
   if (!container) {
     // No existing container - spin up fresh one
     // Get GitHub App token
-    const repoFullName = parseRepoFullName(context.trial.repoUrl);
+    const repoFullName = parseRepoFullName(repoUrl);
     const accessResult = await checkRepoAccess(repoFullName, userId);
     if (!accessResult.hasAccess) {
       throw new Error("GitHub App not installed or repo not accessible");
@@ -129,7 +121,7 @@ async function ensureConsulContainer(
     }
 
     // Clone repository with all branches (not shallow - need branch history)
-    const authUrl = buildAuthenticatedUrl(context.trial.repoUrl, gitToken);
+    const authUrl = buildAuthenticatedUrl(repoUrl, gitToken);
     const { exitCode: cloneCode } = await container.exec([
       "sh",
       "-c",
@@ -163,7 +155,7 @@ async function ensureConsulContainer(
 /**
  * Build Consul system prompt with git tools context
  */
-function buildConsulSystemPromptWithTools(context: ConsulContext): string {
+export function buildConsulSystemPromptWithTools(context: ConsulContext): string {
   const basePrompt = buildConsulSystemPrompt(context);
 
   const toolsAddendum = `
@@ -196,64 +188,4 @@ ${context.gladiators.map((g) => `- ${g.name}: \`${g.branchName}\``).join("\n")}
 `;
 
   return basePrompt + toolsAddendum;
-}
-
-/**
- * Send a message to the Consul and stream the response
- */
-export async function sendConsulMessage(
-  trialId: string,
-  message: string,
-  context: ConsulContext,
-  userId: string,
-  claudeToken: string,
-  onEvent: (event: AgentEvent) => void | Promise<void>,
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    // Ensure container is set up with git credentials
-    await ensureConsulContainer(trialId, context, userId);
-
-    // Build system prompt with git tools context
-    const systemPrompt = buildConsulSystemPromptWithTools(context);
-    const trialContext = buildConsulContext(context);
-
-    // Get or create session using the shared session manager
-    const { isNew } = await consulSessionManager.getOrCreateSession(trialId, claudeToken, {
-      systemPrompt: `${systemPrompt}\n\n# Trial Context\n${trialContext}`,
-      tools: ["Read", "Bash", "Glob", "Grep"], // Git tools via Bash
-      model: "opus",
-      maxTurns: 25,
-      cwd: "/workspace/repo",
-    });
-
-    // Send message and stream response using session manager
-    const result = await consulSessionManager.sendMessage(
-      trialId,
-      message,
-      claudeToken,
-      onEvent,
-    );
-
-    return result;
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    };
-  }
-}
-
-/**
- * End a Consul session and destroy the container
- */
-export async function endConsulSession(trialId: string): Promise<void> {
-  await consulSessionManager.endSession(trialId);
-  await destroyTrialContainer(trialId);
-}
-
-/**
- * Check if a Consul session exists for a trial
- */
-export function hasConsulSession(trialId: string): boolean {
-  return consulSessionManager.hasSession(trialId);
 }
