@@ -3,10 +3,46 @@ set -e
 
 SERVER="deploy@enterthedome.xyz"
 REMOTE_DIR="/home/deploy/thunderdome"
+AGENT_SERVER_DIR="packages/agent-server"
+AGENT_IMAGE="thunderdome/agent-server:latest"
 
 echo "⚡ Deploying Thunderdome"
 
-echo "🔨 Building..."
+# Check if agent-server Docker image needs rebuilding
+check_agent_server_image() {
+    # Check if image exists
+    if ! docker image inspect "$AGENT_IMAGE" >/dev/null 2>&1; then
+        echo "📦 Image $AGENT_IMAGE not found, building..."
+        return 0
+    fi
+
+    # Get image creation timestamp
+    image_created=$(docker image inspect "$AGENT_IMAGE" --format '{{.Created}}')
+    image_timestamp=$(date -d "$image_created" +%s 2>/dev/null || date -jf "%Y-%m-%dT%H:%M:%S" "${image_created%%.*}" +%s 2>/dev/null)
+
+    # Check git for changes since image was built
+    latest_commit=$(git log -1 --format=%ct -- "$AGENT_SERVER_DIR" 2>/dev/null || echo "0")
+    if [ "$latest_commit" -gt "$image_timestamp" ] 2>/dev/null; then
+        echo "📦 Changes detected in $AGENT_SERVER_DIR, rebuilding..."
+        return 0
+    fi
+
+    echo "✅ $AGENT_IMAGE is up-to-date"
+    return 1
+}
+
+build_agent_server() {
+    echo "🔨 Building agent-server..."
+    (cd "$AGENT_SERVER_DIR" && npm run build && docker build -t "$AGENT_IMAGE" .)
+    echo "✅ agent-server image built"
+}
+
+echo "🐳 Checking Docker images..."
+if check_agent_server_image; then
+    build_agent_server
+fi
+
+echo "🔨 Building Next.js..."
 npm run build
 
 # Find where server.js actually is (Next.js mirrors project structure)
