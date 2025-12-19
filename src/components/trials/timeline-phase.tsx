@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import type { PhaseState } from "@/hooks/use-trial-phases";
 import { cn } from "@/lib/utils";
 
-export type PhaseColorScheme = "yellow" | "orange" | "purple" | "blue" | "green" | "red";
+export type PhaseColorScheme = "yellow" | "orange" | "purple" | "blue" | "green" | "red" | "cyan";
 
 interface TimelinePhaseProps {
   title: string;
@@ -39,6 +39,7 @@ const colorStyles: Record<PhaseColorScheme, string> = {
   blue: "text-blue-400 border-blue-500",
   green: "text-green-400 border-green-500",
   red: "text-red-400 border-red-500",
+  cyan: "text-cyan-400 border-cyan-500",
 };
 
 const connectorColors: Record<PhaseColorScheme, string> = {
@@ -48,6 +49,7 @@ const connectorColors: Record<PhaseColorScheme, string> = {
   blue: "from-blue-500/50",
   green: "from-green-500/50",
   red: "from-red-500/50",
+  cyan: "from-cyan-500/50",
 };
 
 export function TimelinePhase({
@@ -103,6 +105,7 @@ export function TimelinePhase({
                   colorScheme === "purple" && "bg-purple-500",
                   colorScheme === "blue" && "bg-blue-500",
                   colorScheme === "green" && "bg-green-500",
+                  colorScheme === "cyan" && "bg-cyan-500",
                 )}
               />
             )}
@@ -146,6 +149,7 @@ export function TimelinePhase({
                         colorScheme === "orange" && "bg-orange-500/20 text-orange-400",
                         colorScheme === "purple" && "bg-purple-500/20 text-purple-400",
                         colorScheme === "blue" && "bg-blue-500/20 text-blue-400",
+                        colorScheme === "cyan" && "bg-cyan-500/20 text-cyan-400",
                       )}
                     >
                       Active
@@ -201,6 +205,7 @@ export function ThinkingIndicator({
     blue: "bg-blue-400",
     green: "bg-green-400",
     red: "bg-red-400",
+    cyan: "bg-cyan-400",
   };
 
   return (

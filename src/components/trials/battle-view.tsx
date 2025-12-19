@@ -105,6 +105,7 @@ export function BattleView({
   // Refetch when important events occur
   useEffect(() => {
     const importantEvents = [
+      "setup_complete",
       "lanista_complete",
       "gladiators_created",
       "state_change",
@@ -230,7 +231,14 @@ export function BattleView({
       )}
 
       {/* Trial Timeline - The main event! */}
-      <TrialTimeline phases={phases} gladiators={gladiators} judges={judges} verdict={verdict} />
+      <TrialTimeline
+        trialId={trial.id}
+        repoUrl={trial.repoUrl}
+        phases={phases}
+        gladiators={gladiators}
+        judges={judges}
+        verdict={verdict}
+      />
 
       {/* Debug Panel */}
       <div className="border-t border-border pt-6 mt-8">

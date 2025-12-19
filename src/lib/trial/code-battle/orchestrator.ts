@@ -213,6 +213,7 @@ async function pushBranches(trialId: string, onOutput?: (data: string) => void):
 
 /**
  * Run the full code battle flow
+ * Now handles both repo-based and repo-less trials
  */
 export async function runCodeBattle(
   trialId: string,
@@ -231,37 +232,7 @@ export async function runCodeBattle(
       throw new Error("Trial not found");
     }
 
-    if (!trial.repoUrl) {
-      throw new Error("No repository URL configured for this trial");
-    }
-
-    // Get GitHub App token for git operations
-    const repoFullName = parseRepoFullName(trial.repoUrl);
-
-    await broadcastTrialUpdate(trialId, {
-      type: "container_status",
-      status: "authenticating",
-      message: "Authenticating with GitHub...",
-    });
-
-    const accessResult = await checkRepoAccess(repoFullName, userId);
-    if (!accessResult.hasAccess) {
-      if (accessResult.reason === "no_installation") {
-        throw new Error(
-          "GitHub App not installed. Please install the Thunderdome app on this repository.",
-        );
-      }
-      throw new Error(
-        `Repository ${repoFullName} is not accessible. Please add it to your GitHub App installation.`,
-      );
-    }
-
-    // Get short-lived installation token for git operations
-    const repoName = repoFullName.split("/")[1];
-    const tokenResult = await getInstallationToken(accessResult.installationId, [repoName]);
-    const gitToken = tokenResult.token;
-
-    // Start container
+    // Start container (always)
     await broadcastTrialUpdate(trialId, {
       type: "container_status",
       status: "starting",
@@ -283,61 +254,91 @@ export async function runCodeBattle(
       throw new Error("Agent server failed to start");
     }
 
-    // Clone repository with GitHub App token
-    await broadcastTrialUpdate(trialId, {
-      type: "container_status",
-      status: "cloning",
-      message: "Cloning repository...",
-    });
-
-    const cloneSuccess = await cloneRepository(trialId, trial.repoUrl, gitToken, (data) => {
-      broadcastTrialUpdate(trialId, {
-        type: "setup_output",
-        content: data,
-      });
-    });
-
-    if (!cloneSuccess) {
-      throw new Error("Failed to clone repository");
-    }
-
-    // Check if setup.sh exists
-    const setupExists = await checkSetupExists(trialId);
-
-    if (!setupExists) {
-      // No setup.sh - transition to setup_discovery phase and wait for user
-      await transitionTrialState(trialId, "setup_discovery");
+    // Only do repo-related stuff if there's a repo
+    if (trial.repoUrl) {
+      // Get GitHub App token for git operations
+      const repoFullName = parseRepoFullName(trial.repoUrl);
 
       await broadcastTrialUpdate(trialId, {
         type: "container_status",
-        status: "needs_setup",
-        message: "Repository needs setup configuration. Starting interactive setup discovery...",
+        status: "authenticating",
+        message: "Authenticating with GitHub...",
       });
 
-      // Return early - user will complete setup via /api/trials/:id/setup
-      // Then call continueAfterSetup() to resume
-      return;
-    }
+      const accessResult = await checkRepoAccess(repoFullName, userId);
+      if (!accessResult.hasAccess) {
+        if (accessResult.reason === "no_installation") {
+          throw new Error(
+            "GitHub App not installed. Please install the Thunderdome app on this repository.",
+          );
+        }
+        throw new Error(
+          `Repository ${repoFullName} is not accessible. Please add it to your GitHub App installation.`,
+        );
+      }
 
-    // Setup exists - run it
-    await broadcastTrialUpdate(trialId, {
-      type: "container_status",
-      status: "setup",
-      message: "Running setup script...",
-    });
+      // Get short-lived installation token for git operations
+      const repoName = repoFullName.split("/")[1];
+      const tokenResult = await getInstallationToken(accessResult.installationId, [repoName]);
+      const gitToken = tokenResult.token;
 
-    const setupSuccess = await runSetupScript(trialId, (data) => {
-      broadcastTrialUpdate(trialId, {
-        type: "setup_output",
-        content: data,
+      // Clone repository with GitHub App token
+      await broadcastTrialUpdate(trialId, {
+        type: "container_status",
+        status: "cloning",
+        message: "Cloning repository...",
       });
-    });
 
-    if (!setupSuccess) {
-      throw new Error("Setup script failed");
+      const cloneSuccess = await cloneRepository(trialId, trial.repoUrl, gitToken, (data) => {
+        broadcastTrialUpdate(trialId, {
+          type: "setup_output",
+          content: data,
+        });
+      });
+
+      if (!cloneSuccess) {
+        throw new Error("Failed to clone repository");
+      }
+
+      // Check if setup.sh exists
+      const setupExists = await checkSetupExists(trialId);
+
+      if (!setupExists) {
+        // No setup.sh - transition to setup_discovery phase and wait for user
+        await transitionTrialState(trialId, "setup_discovery");
+
+        await broadcastTrialUpdate(trialId, {
+          type: "container_status",
+          status: "needs_setup",
+          message: "Repository needs setup configuration. Starting interactive setup discovery...",
+        });
+
+        // Return early - user will complete setup via /api/trials/:id/setup
+        // Then call continueAfterSetup() to resume
+        return;
+      }
+
+      // Setup exists - run it
+      await broadcastTrialUpdate(trialId, {
+        type: "container_status",
+        status: "setup",
+        message: "Running setup script...",
+      });
+
+      const setupSuccess = await runSetupScript(trialId, (data) => {
+        broadcastTrialUpdate(trialId, {
+          type: "setup_output",
+          content: data,
+        });
+      });
+
+      if (!setupSuccess) {
+        throw new Error("Setup script failed");
+      }
     }
+    // For repo-less trials: skip all the above, go straight to gladiators
 
-    // Continue to gladiators
+    // Continue to gladiators (both repo and repo-less paths converge here)
     await runGladiatorsAndBeyond(trialId, trial, container, claudeToken);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -422,17 +423,36 @@ export async function continueAfterSetup(trialId: string, claudeToken: string): 
  */
 async function runGladiatorsAndBeyond(
   trialId: string,
-  trial: { challengePrompt: string; repoUrl: string | null },
+  trial: { challengePrompt: string; repoUrl: string | null; trialType: string },
   container: TrialContainer,
   claudeToken: string,
 ): Promise<void> {
-  // Get gladiators
-  const trialGladiators = await db.query.gladiators.findMany({
+  // Get gladiators - if none exist, run Lanista to create them
+  let trialGladiators = await db.query.gladiators.findMany({
     where: eq(gladiators.trialId, trialId),
   });
 
   if (trialGladiators.length === 0) {
-    throw new Error("No gladiators found for this trial");
+    // Run Lanista to design gladiators (for repo-less trials)
+    await broadcastTrialUpdate(trialId, {
+      type: "container_status",
+      status: "planning",
+      message: "Lanista designing gladiators...",
+    });
+
+    const { runLanista } = await import("../lanista");
+    await runLanista(trialId, claudeToken, (event) => {
+      broadcastTrialUpdate(trialId, event);
+    });
+
+    // Fetch gladiators again
+    trialGladiators = await db.query.gladiators.findMany({
+      where: eq(gladiators.trialId, trialId),
+    });
+
+    if (trialGladiators.length === 0) {
+      throw new Error("Lanista failed to create gladiators");
+    }
   }
 
   // Run gladiators in parallel
@@ -458,19 +478,21 @@ async function runGladiatorsAndBeyond(
   const successCount = results.filter((r) => r.status === "fulfilled").length;
   const failureCount = results.filter((r) => r.status === "rejected").length;
 
-  // Push branches
-  await broadcastTrialUpdate(trialId, {
-    type: "container_status",
-    status: "pushing",
-    message: "Pushing branches to repository...",
-  });
-
-  await pushBranches(trialId, (data) => {
-    broadcastTrialUpdate(trialId, {
-      type: "setup_output",
-      content: data,
+  // Push branches (only for repo-based trials)
+  if (trial.repoUrl) {
+    await broadcastTrialUpdate(trialId, {
+      type: "container_status",
+      status: "pushing",
+      message: "Pushing branches to repository...",
     });
-  });
+
+    await pushBranches(trialId, (data) => {
+      broadcastTrialUpdate(trialId, {
+        type: "setup_output",
+        content: data,
+      });
+    });
+  }
 
   await broadcastTrialUpdate(trialId, {
     type: "battle_complete",

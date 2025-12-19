@@ -57,19 +57,48 @@ export async function runCodeBattleGladiator(
   oauthToken: string,
 ): Promise<void> {
   const streamLog: StreamEvent[] = [];
-  const branchName = `thunderdome/trial-${trialId}/${slugify(gladiator.name)}`;
-  const worktreePath = `/workspace/${slugify(gladiator.name)}`;
 
   // Get agent client from container
   const agentClient = container.getAgentClient();
 
   try {
-    // Create worktree for this gladiator
-    await container.exec([
+    // Check if this is a repo-based trial
+    const { stdout: repoExists } = await container.exec([
       "sh",
       "-c",
-      `cd /workspace/repo && git worktree add ${worktreePath} -b ${branchName}`,
+      "test -d /workspace/repo && echo 'true' || echo 'false'",
     ]);
+    const hasRepo = repoExists.trim() === "true";
+
+    let branchName: string;
+    let worktreePath: string;
+    let repoContext: string;
+
+    if (hasRepo) {
+      // Repo-based trial: create worktree
+      branchName = `thunderdome/trial-${trialId}/${slugify(gladiator.name)}`;
+      worktreePath = `/workspace/${slugify(gladiator.name)}`;
+
+      await container.exec([
+        "sh",
+        "-c",
+        `cd /workspace/repo && git worktree add ${worktreePath} -b ${branchName}`,
+      ]);
+
+      repoContext = `Working directory: ${worktreePath}\nBranch: ${branchName}`;
+    } else {
+      // Repo-less trial: use dedicated directory
+      branchName = `trial-${trialId}-${slugify(gladiator.name)}`;
+      worktreePath = `/workspace/gladiator-${slugify(gladiator.name)}`;
+
+      await container.exec([
+        "sh",
+        "-c",
+        `mkdir -p ${worktreePath}`,
+      ]);
+
+      repoContext = `Working directory: ${worktreePath}`;
+    }
 
     // Update gladiator with branch name and status
     await db
@@ -95,7 +124,6 @@ export async function runCodeBattleGladiator(
     });
 
     // Build system prompt with repo context and FINDINGS requirement
-    const repoContext = `Working directory: ${worktreePath}\nBranch: ${branchName}`;
     const findingsAddition = createFindingsPromptAddition();
 
     const systemPrompt = buildCodeBattlePrompt(
@@ -168,12 +196,14 @@ export async function runCodeBattleGladiator(
       `cat ${worktreePath}/.thunderdome/FINDINGS.md 2>/dev/null || echo ""`,
     ]);
 
-    // Commit changes
-    await container.exec([
-      "sh",
-      "-c",
-      `cd ${worktreePath} && git add -A && git commit -m "Gladiator ${gladiator.name} submission" --allow-empty`,
-    ]);
+    // Commit changes (only for repo-based trials)
+    if (hasRepo) {
+      await container.exec([
+        "sh",
+        "-c",
+        `cd ${worktreePath} && git add -A && git commit -m "Gladiator ${gladiator.name} submission" --allow-empty`,
+      ]);
+    }
 
     // Update gladiator record
     await db

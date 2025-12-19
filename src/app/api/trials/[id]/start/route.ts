@@ -10,11 +10,7 @@ import { db } from "@/db";
 import { trials, users } from "@/db/schema";
 import { decrypt } from "@/lib/encryption";
 import { requireUser } from "@/lib/session";
-import { runArbiter } from "@/lib/trial/arbiter";
-import { broadcastTrialUpdate } from "@/lib/trial/broadcast";
 import { runCodeBattle } from "@/lib/trial/code-battle/orchestrator";
-import { runGladiators } from "@/lib/trial/gladiators";
-import { runLanista } from "@/lib/trial/lanista";
 
 /**
  * POST - Start a trial
@@ -45,34 +41,6 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       );
     }
 
-    // Check if this is a code battle (repo URL exists)
-    if (trial.repoUrl) {
-      // Get full user record from database for tokens
-      const dbUser = await db.query.users.findFirst({
-        where: eq(users.id, user.id),
-      });
-
-      // Get Claude token
-      if (!dbUser?.claudeToken) {
-        return NextResponse.json(
-          { error: "Claude token required. Configure in settings." },
-          { status: 400 },
-        );
-      }
-
-      const claudeToken = decrypt(dbUser.claudeToken);
-
-      // Run code battle in background
-      // Setup discovery runs in container if no setup.sh exists in repo
-      runCodeBattle(trial.id, user.id, claudeToken).catch(console.error);
-
-      return NextResponse.json({
-        success: true,
-        status: "container_starting",
-        message: "Code battle starting...",
-      });
-    }
-
     // Get user's Claude token
     const dbUser = await db.query.users.findFirst({
       where: eq(users.id, user.id),
@@ -87,35 +55,15 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
     const claudeToken = decrypt(dbUser.claudeToken);
 
-    // Run Lanista and gladiators in background
-    (async () => {
-      try {
-        // Run Lanista to design gladiators
-        await runLanista(trialId, claudeToken, (event) => {
-          broadcastTrialUpdate(trialId, event);
-        });
-
-        // Run gladiators in parallel
-        await runGladiators(trialId, claudeToken);
-
-        // Run Arbiter to design judges and evaluate (includes running judges)
-        await runArbiter(trialId, claudeToken, (event) => {
-          broadcastTrialUpdate(trialId, event);
-        });
-      } catch (error) {
-        console.error("Trial execution failed:", error);
-        broadcastTrialUpdate(trialId, {
-          type: "error",
-          data: { error: error instanceof Error ? error.message : "Unknown error" },
-        });
-      }
-    })();
+    // All trials run in containers
+    runCodeBattle(trial.id, user.id, claudeToken).catch((error) => {
+      console.error(`[Trial ${trial.id}] Code battle error:`, error);
+    });
 
     return NextResponse.json({
       success: true,
-      message: "Trial started successfully",
-      trialId,
-      status: "PLANNING",
+      status: "container_starting",
+      message: trial.repoUrl ? "Starting code battle..." : "Starting trial...",
     });
   } catch (error: any) {
     // Handle state transition errors specially

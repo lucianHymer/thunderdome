@@ -12,6 +12,7 @@ import { PhaseArbiter } from "./phases/phase-arbiter";
 import { PhaseBattle } from "./phases/phase-battle";
 import { PhaseJudging } from "./phases/phase-judging";
 import { PhaseLanista } from "./phases/phase-lanista";
+import { PhaseSetupDiscovery } from "./phases/phase-setup-discovery";
 import { PhaseVerdict } from "./phases/phase-verdict";
 import { TimelinePhase } from "./timeline-phase";
 
@@ -39,13 +40,22 @@ interface Verdict {
 }
 
 interface TrialTimelineProps {
+  trialId: string;
+  repoUrl?: string | null;
   phases: TrialPhases;
   gladiators: Gladiator[];
   judges?: Judge[];
   verdict?: Verdict | null;
 }
 
-export function TrialTimeline({ phases, gladiators, judges = [], verdict }: TrialTimelineProps) {
+export function TrialTimeline({
+  trialId,
+  repoUrl,
+  phases,
+  gladiators,
+  judges = [],
+  verdict,
+}: TrialTimelineProps) {
   // Combine phase judge designs with actual judge records
   const judgesWithEvaluations = judges.map((judge) => {
     const phaseJudge = phases.judging.judges?.find((j) => j.judgeId === judge.id);
@@ -66,6 +76,20 @@ export function TrialTimeline({ phases, gladiators, judges = [], verdict }: Tria
 
   return (
     <div className="space-y-2">
+      {/* Setup Discovery Phase - only for repo trials */}
+      {repoUrl && (
+        <TimelinePhase
+          title="Setup Discovery"
+          subtitle="Configuring repository environment"
+          state={phases.setupDiscovery.state}
+          icon="🔧"
+          colorScheme="cyan"
+          defaultOpen={phases.setupDiscovery.state === "active"}
+        >
+          <PhaseSetupDiscovery trialId={trialId} state={phases.setupDiscovery.state} />
+        </TimelinePhase>
+      )}
+
       {/* Lanista Phase */}
       <TimelinePhase
         title="Lanista Planning"

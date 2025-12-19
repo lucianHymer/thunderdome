@@ -94,7 +94,13 @@ export interface VerdictPhase {
   error?: string;
 }
 
+export interface SetupDiscoveryPhase {
+  state: PhaseState;
+  error?: string;
+}
+
 export interface TrialPhases {
+  setupDiscovery: SetupDiscoveryPhase;
   lanista: LanistaPhase;
   battle: BattlePhase;
   arbiter: ArbiterPhase;
@@ -113,6 +119,7 @@ function derivePhases(
 ): TrialPhases {
   // Initialize default phases
   const phases: TrialPhases = {
+    setupDiscovery: { state: "pending" },
     lanista: { state: "pending" },
     battle: {
       state: "pending",
@@ -171,6 +178,17 @@ function derivePhases(
   // Process stream events to update phase states
   for (const event of events) {
     switch (event.type) {
+      // Setup Discovery events
+      case "container_status":
+        if (event.status === "needs_setup") {
+          phases.setupDiscovery.state = "active";
+        }
+        break;
+
+      case "setup_complete":
+        phases.setupDiscovery.state = "complete";
+        break;
+
       // Lanista events
       case "lanista_thinking":
         if (phases.lanista.state === "pending") {
@@ -372,6 +390,9 @@ function derivePhases(
   }
 
   // Infer phase states from trial status if events are missing
+  if (trialStatus === "SETUP_DISCOVERY") {
+    phases.setupDiscovery.state = "active";
+  }
   if (trialStatus === "PLANNING" && phases.lanista.state === "pending") {
     phases.lanista.state = "active";
   }
@@ -409,7 +430,7 @@ export interface UseTrialPhasesOptions {
 export interface UseTrialPhasesReturn {
   phases: TrialPhases;
   stream: ReturnType<typeof useTrialStream>;
-  currentPhase: "lanista" | "battle" | "arbiter" | "judging" | "verdict" | null;
+  currentPhase: "setupDiscovery" | "lanista" | "battle" | "arbiter" | "judging" | "verdict" | null;
 }
 
 /**
@@ -436,6 +457,7 @@ export function useTrialPhases(
     if (phases.arbiter.state === "active") return "arbiter";
     if (phases.battle.state === "active") return "battle";
     if (phases.lanista.state === "active") return "lanista";
+    if (phases.setupDiscovery.state === "active") return "setupDiscovery";
     return null;
   }, [phases]);
 

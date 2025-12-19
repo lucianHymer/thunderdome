@@ -7,8 +7,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import { SetupDiscovery } from "@/components/setup/setup-discovery";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,8 +27,6 @@ interface Repository {
   defaultBranch: string;
 }
 
-type SetupStatus = "unknown" | "checking" | "exists" | "missing" | "running";
-
 export function NewTrialForm() {
   const router = useRouter();
   const [challengePrompt, setChallengePrompt] = useState("");
@@ -37,39 +34,6 @@ export function NewTrialForm() {
   const [error, setError] = useState<string | null>(null);
   const [showRepoSelector, setShowRepoSelector] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState<Repository | undefined>();
-  const [setupStatus, setSetupStatus] = useState<SetupStatus>("unknown");
-  const [showSetupDiscovery, setShowSetupDiscovery] = useState(false);
-
-  // Check if setup exists when repo is selected
-  const checkSetup = useCallback(async (repo: Repository) => {
-    setSetupStatus("checking");
-    try {
-      const [owner, repoName] = repo.fullName.split("/");
-      const response = await fetch(`/api/repos/${owner}/${repoName}/setup`);
-      const data = await response.json();
-      setSetupStatus(data.exists ? "exists" : "missing");
-    } catch {
-      setSetupStatus("unknown");
-    }
-  }, []);
-
-  // Check setup when repo changes
-  useEffect(() => {
-    if (selectedRepo) {
-      checkSetup(selectedRepo);
-    } else {
-      setSetupStatus("unknown");
-    }
-  }, [selectedRepo, checkSetup]);
-
-  const handleSetupComplete = () => {
-    setShowSetupDiscovery(false);
-    setSetupStatus("exists");
-  };
-
-  const handleSetupCancel = () => {
-    setShowSetupDiscovery(false);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,12 +41,6 @@ export function NewTrialForm() {
 
     if (!challengePrompt.trim()) {
       setError("Please enter a challenge prompt");
-      return;
-    }
-
-    // If repo is selected but setup is missing, show setup discovery
-    if (selectedRepo && setupStatus === "missing") {
-      setShowSetupDiscovery(true);
       return;
     }
 
@@ -155,31 +113,13 @@ export function NewTrialForm() {
             </span>
           </button>
           {selectedRepo && (
-            <>
-              {/* Setup status badge */}
-              {setupStatus === "checking" && (
-                <span className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-300">
-                  Checking setup...
-                </span>
-              )}
-              {setupStatus === "exists" && (
-                <span className="text-xs px-2 py-0.5 rounded bg-green-900 text-green-300">
-                  Setup ready
-                </span>
-              )}
-              {setupStatus === "missing" && (
-                <span className="text-xs px-2 py-0.5 rounded bg-yellow-900 text-yellow-300">
-                  Setup needed
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => setSelectedRepo(undefined)}
-                className="text-xs text-red-400 hover:text-red-300"
-              >
-                ✕ Clear
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => setSelectedRepo(undefined)}
+              className="text-xs text-red-400 hover:text-red-300"
+            >
+              ✕ Clear
+            </button>
           )}
         </div>
         {showRepoSelector && (
@@ -189,36 +129,6 @@ export function NewTrialForm() {
               create branches.
             </p>
             <RepoSelector onSelect={setSelectedRepo} selectedRepo={selectedRepo} />
-          </div>
-        )}
-
-        {/* Setup Discovery UI */}
-        {selectedRepo && setupStatus === "missing" && !showSetupDiscovery && (
-          <div className="mt-3 border border-yellow-500/50 bg-yellow-950/20 rounded-lg p-4">
-            <p className="text-sm text-yellow-200 mb-3">
-              This repository needs setup discovery before starting a code battle. Claude will
-              analyze the repo and create setup scripts.
-            </p>
-            <Button
-              type="button"
-              onClick={() => setShowSetupDiscovery(true)}
-              variant="outline"
-              className="border-yellow-500/50 text-yellow-300 hover:bg-yellow-950/50"
-            >
-              Run Setup Discovery
-            </Button>
-          </div>
-        )}
-
-        {/* Setup Discovery Modal/Panel */}
-        {showSetupDiscovery && selectedRepo && (
-          <div className="mt-3 border border-border rounded-lg p-4">
-            <SetupDiscovery
-              owner={selectedRepo.fullName.split("/")[0]}
-              repo={selectedRepo.fullName.split("/")[1]}
-              onComplete={handleSetupComplete}
-              onCancel={handleSetupCancel}
-            />
           </div>
         )}
       </div>
@@ -231,20 +141,11 @@ export function NewTrialForm() {
 
       <Button
         type="submit"
-        disabled={
-          isSubmitting ||
-          !challengePrompt.trim() ||
-          (selectedRepo && setupStatus === "checking") ||
-          showSetupDiscovery
-        }
+        disabled={isSubmitting || !challengePrompt.trim()}
         className="w-full bg-orange-600 hover:bg-orange-700"
         size="lg"
       >
-        {isSubmitting
-          ? "Creating Trial..."
-          : selectedRepo && setupStatus === "missing"
-            ? "Run Setup First"
-            : "⚔️ Start Battle"}
+        {isSubmitting ? "Creating Trial..." : "⚔️ Start Battle"}
       </Button>
     </form>
   );
