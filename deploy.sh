@@ -50,10 +50,18 @@ if check_agent_server_image; then
     NEEDS_PUSH=true
 fi
 
-# Also check if prod has the image
+# Check if prod has the image and if it matches local
 if ! ssh $SERVER "docker image inspect $AGENT_IMAGE >/dev/null 2>&1"; then
     echo "📦 Image not found on prod server"
     NEEDS_PUSH=true
+else
+    # Compare image IDs to detect version mismatch
+    LOCAL_ID=$(docker image inspect "$AGENT_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "none")
+    REMOTE_ID=$(ssh $SERVER "docker image inspect $AGENT_IMAGE --format '{{.Id}}'" 2>/dev/null || echo "missing")
+    if [ "$LOCAL_ID" != "$REMOTE_ID" ]; then
+        echo "📦 Prod image is stale (local: ${LOCAL_ID:7:12}, prod: ${REMOTE_ID:7:12})"
+        NEEDS_PUSH=true
+    fi
 fi
 
 if [ "$NEEDS_PUSH" = true ]; then
