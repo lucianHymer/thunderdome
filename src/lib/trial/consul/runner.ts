@@ -6,7 +6,7 @@
  */
 
 import type { AgentEvent } from "@/lib/docker/agent-client";
-import type { TrialContainer } from "@/lib/docker/container";
+import { createAgentSessionManager } from "@/lib/discovery/agent-session";
 import { checkRepoAccess, getInstallationToken } from "@/lib/github/app";
 import {
   destroyTrialContainer,
@@ -50,19 +50,8 @@ interface ConsulContext {
   verdict: Verdict;
 }
 
-// In-memory session management for Consul containers
-// Key: trialId, Value: { sessionId, container, lastActivity }
-const consulSessions = new Map<
-  string,
-  {
-    sessionId: string;
-    container: TrialContainer;
-    lastActivity: Date;
-  }
->();
-
-// Cleanup idle sessions after 10 minutes
-const SESSION_IDLE_TIMEOUT = 10 * 60 * 1000;
+// Create session manager with 10 minute idle timeout
+const consulSessionManager = createAgentSessionManager("consul", 10 * 60 * 1000);
 
 /**
  * Parse owner/repo from GitHub URL
@@ -90,29 +79,20 @@ function buildAuthenticatedUrl(repoUrl: string, token: string): string {
 }
 
 /**
- * Get or create a Consul container session for a trial
+ * Ensure container is set up with git repository and credentials
+ * This is Consul-specific setup that runs before creating an agent session
  */
-async function getOrCreateConsulSession(
+async function ensureConsulContainer(
   trialId: string,
   context: ConsulContext,
   userId: string,
-  claudeToken: string,
-): Promise<{ sessionId: string; container: TrialContainer }> {
-  // Check for existing Consul session
-  const existing = consulSessions.get(trialId);
-  if (existing) {
-    // Update last activity
-    existing.lastActivity = new Date();
-    return { sessionId: existing.sessionId, container: existing.container };
-  }
-
-  // Need to create session - check if trial container still exists
+): Promise<void> {
   if (!context.trial.repoUrl) {
     throw new Error("Trial has no repository URL - cannot start Consul with git access");
   }
 
   // Try to reuse existing trial container (from gladiator/arbiter phase)
-  let container: TrialContainer | undefined = getTrialContainer(trialId);
+  let container = getTrialContainer(trialId);
 
   if (container) {
     // Container exists - check if agent server is still healthy
@@ -178,30 +158,6 @@ async function getOrCreateConsulSession(
     // Fetch all remote branches
     await container.exec(["sh", "-c", "cd /workspace/repo && git fetch origin --prune"]);
   }
-
-  // Build system prompt with git tools context
-  const systemPrompt = buildConsulSystemPromptWithTools(context);
-  const trialContext = buildConsulContext(context);
-
-  // Create session on agent server
-  const agentClient = container.getAgentClient();
-  const session = await agentClient.createSession({
-    model: "opus",
-    systemPrompt: `${systemPrompt}\n\n# Trial Context\n${trialContext}`,
-    tools: ["Read", "Bash", "Glob", "Grep"], // Git tools via Bash
-    cwd: "/workspace/repo",
-    maxTurns: 25,
-    oauthToken: claudeToken,
-  });
-
-  // Store session
-  consulSessions.set(trialId, {
-    sessionId: session.sessionId,
-    container,
-    lastActivity: new Date(),
-  });
-
-  return { sessionId: session.sessionId, container };
 }
 
 /**
@@ -254,28 +210,31 @@ export async function sendConsulMessage(
   onEvent: (event: AgentEvent) => void | Promise<void>,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { sessionId, container } = await getOrCreateConsulSession(
+    // Ensure container is set up with git credentials
+    await ensureConsulContainer(trialId, context, userId);
+
+    // Build system prompt with git tools context
+    const systemPrompt = buildConsulSystemPromptWithTools(context);
+    const trialContext = buildConsulContext(context);
+
+    // Get or create session using the shared session manager
+    const { isNew } = await consulSessionManager.getOrCreateSession(trialId, claudeToken, {
+      systemPrompt: `${systemPrompt}\n\n# Trial Context\n${trialContext}`,
+      tools: ["Read", "Bash", "Glob", "Grep"], // Git tools via Bash
+      model: "opus",
+      maxTurns: 25,
+      cwd: "/workspace/repo",
+    });
+
+    // Send message and stream response using session manager
+    const result = await consulSessionManager.sendMessage(
       trialId,
-      context,
-      userId,
+      message,
       claudeToken,
+      onEvent,
     );
 
-    const agentClient = container.getAgentClient();
-
-    // Update last activity
-    const session = consulSessions.get(trialId);
-    if (session) {
-      session.lastActivity = new Date();
-    }
-
-    // Send message and stream response
-    const result = await agentClient.sendMessage(sessionId, message, claudeToken, onEvent);
-
-    return {
-      success: result.success,
-      error: result.error,
-    };
+    return result;
   } catch (error) {
     return {
       success: false,
@@ -288,42 +247,13 @@ export async function sendConsulMessage(
  * End a Consul session and destroy the container
  */
 export async function endConsulSession(trialId: string): Promise<void> {
-  const session = consulSessions.get(trialId);
-  if (session) {
-    try {
-      await session.container.getAgentClient().endSession(session.sessionId);
-    } catch {
-      // Ignore session end errors
-    }
-    await destroyTrialContainer(trialId);
-    consulSessions.delete(trialId);
-  }
+  await consulSessionManager.endSession(trialId);
+  await destroyTrialContainer(trialId);
 }
 
 /**
  * Check if a Consul session exists for a trial
  */
 export function hasConsulSession(trialId: string): boolean {
-  return consulSessions.has(trialId);
+  return consulSessionManager.hasSession(trialId);
 }
-
-/**
- * Cleanup idle Consul sessions (call periodically)
- */
-export async function cleanupIdleConsulSessions(): Promise<void> {
-  const now = Date.now();
-  const toCleanup: string[] = [];
-
-  for (const [trialId, session] of consulSessions.entries()) {
-    if (now - session.lastActivity.getTime() > SESSION_IDLE_TIMEOUT) {
-      toCleanup.push(trialId);
-    }
-  }
-
-  for (const trialId of toCleanup) {
-    await endConsulSession(trialId);
-  }
-}
-
-// Start cleanup interval
-setInterval(cleanupIdleConsulSessions, 60000); // Check every minute

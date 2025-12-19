@@ -2,14 +2,13 @@
  * Tests for Lanista schema validation
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { LanistaOutputSchema } from "../../../claude/schemas";
 
 describe("LanistaOutputSchema", () => {
   it("accepts valid output with 2+ gladiators", () => {
     const validOutput = {
-      reasoning:
-        "This challenge requires both security and performance perspectives.",
+      reasoning: "This challenge requires both security and performance perspectives.",
       gladiators: [
         {
           name: "Security Guardian",

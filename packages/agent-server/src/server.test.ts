@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
-import { endSession, getAllSessions, createSession, getSession } from "./sessions.js";
+import { beforeEach, describe, expect, it } from "vitest";
+import { createSession, endSession, getAllSessions, getSession } from "./sessions.js";
 
 // Create a minimal test app (without the actual Claude integration)
 function createTestApp() {
@@ -18,17 +18,11 @@ function createTestApp() {
     const body = await c.req.json();
 
     if (!body.model || !body.tools || !body.cwd || !body.oauthToken) {
-      return c.json(
-        { error: "Missing required fields: model, tools, cwd, oauthToken" },
-        400
-      );
+      return c.json({ error: "Missing required fields: model, tools, cwd, oauthToken" }, 400);
     }
 
     if (!["opus", "sonnet", "haiku"].includes(body.model)) {
-      return c.json(
-        { error: "Invalid model. Must be: opus, sonnet, or haiku" },
-        400
-      );
+      return c.json({ error: "Invalid model. Must be: opus, sonnet, or haiku" }, 400);
     }
 
     const session = createSession({
@@ -272,10 +266,7 @@ describe("server API", () => {
 
       const body = await res.json();
       expect(body.sessions.length).toBe(2);
-      expect(body.sessions.map((s: any) => s.sessionId).sort()).toEqual([
-        "list-1",
-        "list-2",
-      ]);
+      expect(body.sessions.map((s: any) => s.sessionId).sort()).toEqual(["list-1", "list-2"]);
     });
 
     it("returns empty array when no sessions", async () => {

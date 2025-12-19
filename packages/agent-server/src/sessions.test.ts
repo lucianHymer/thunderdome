@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
+  cleanupExpiredSessions,
   createSession,
-  getSession,
-  updateSessionStatus,
-  setClaudeSessionId,
   endSession,
   getAllSessions,
-  cleanupExpiredSessions,
+  getSession,
+  setClaudeSessionId,
+  updateSessionStatus,
 } from "./sessions.js";
 
 describe("sessions", () => {
@@ -128,9 +128,7 @@ describe("sessions", () => {
       const waitPromise = new Promise((resolve) => setTimeout(resolve, 10));
       return waitPromise.then(() => {
         updateSessionStatus("activity-test", "streaming");
-        expect(session.lastActivity.getTime()).toBeGreaterThan(
-          originalActivity.getTime()
-        );
+        expect(session.lastActivity.getTime()).toBeGreaterThan(originalActivity.getTime());
       });
     });
 

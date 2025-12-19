@@ -6,6 +6,7 @@
  */
 
 import type { AgentEvent, OutputFormat } from "@/lib/docker/agent-client";
+import { createAgentSessionManager } from "@/lib/discovery/agent-session";
 import { getTrialContainer } from "@/lib/trial/container-service";
 import { buildInteractiveSetupSystemPrompt, SETUP_DISCOVERY_PROMPT } from "./prompts";
 
@@ -41,15 +42,8 @@ export interface SetupFilesOutput {
 
 const REPO_PATH = "/workspace/repo";
 
-// In-memory session management for setup discovery
-// Key: trialId, Value: { sessionId, lastActivity }
-const setupSessions = new Map<
-  string,
-  {
-    sessionId: string;
-    lastActivity: Date;
-  }
->();
+// Shared session manager for setup discovery
+const setupSessionManager = createAgentSessionManager("setup");
 
 /**
  * Start or get existing setup discovery session for a trial
@@ -59,38 +53,13 @@ export async function getOrCreateSetupSession(
   repoUrl: string,
   oauthToken: string,
 ): Promise<{ sessionId: string; isNew: boolean }> {
-  // Check for existing session
-  const existing = setupSessions.get(trialId);
-  if (existing) {
-    existing.lastActivity = new Date();
-    return { sessionId: existing.sessionId, isNew: false };
-  }
-
-  // Get the trial container (should already exist from orchestrator)
-  const container = getTrialContainer(trialId);
-  if (!container) {
-    throw new Error("Trial container not found. Start the trial first.");
-  }
-
-  const agentClient = container.getAgentClient();
-
-  // Create session with interactive setup prompt
-  const session = await agentClient.createSession({
-    model: "opus",
+  return await setupSessionManager.getOrCreateSession(trialId, oauthToken, {
     systemPrompt: buildInteractiveSetupSystemPrompt(),
     tools: ["Read", "Glob", "Grep", "Bash"],
+    model: "opus",
     cwd: REPO_PATH,
     maxTurns: 50, // More turns for interactive session
-    oauthToken,
   });
-
-  // Store session
-  setupSessions.set(trialId, {
-    sessionId: session.sessionId,
-    lastActivity: new Date(),
-  });
-
-  return { sessionId: session.sessionId, isNew: true };
 }
 
 /**
@@ -103,26 +72,19 @@ export async function sendSetupMessage(
   oauthToken: string,
   onEvent: (event: AgentEvent) => void | Promise<void>,
 ): Promise<{ success: boolean; error?: string }> {
-  const container = getTrialContainer(trialId);
-  if (!container) {
-    return { success: false, error: "Trial container not found" };
-  }
-
   try {
-    const { sessionId, isNew } = await getOrCreateSetupSession(trialId, repoUrl, oauthToken);
-    const agentClient = container.getAgentClient();
+    const { isNew } = await getOrCreateSetupSession(trialId, repoUrl, oauthToken);
 
     // If new session, send the initial discovery prompt
     const prompt = isNew ? SETUP_DISCOVERY_PROMPT(repoUrl, REPO_PATH) : message;
 
-    // Update last activity
-    const session = setupSessions.get(trialId);
-    if (session) {
-      session.lastActivity = new Date();
-    }
-
     // Send message and stream response
-    const result = await agentClient.sendMessage(sessionId, prompt, oauthToken, onEvent);
+    const result = await setupSessionManager.sendMessage(
+      trialId,
+      prompt,
+      oauthToken,
+      onEvent,
+    );
 
     return {
       success: result.success,
@@ -145,19 +107,11 @@ export async function extractSetupFiles(
   conversationSummary: string,
   oauthToken: string,
 ): Promise<{ success: boolean; files?: SetupFilesOutput; error?: string }> {
-  const container = getTrialContainer(trialId);
-  if (!container) {
-    return { success: false, error: "Trial container not found" };
-  }
-
-  const session = setupSessions.get(trialId);
-  if (!session) {
+  if (!setupSessionManager.hasSession(trialId)) {
     return { success: false, error: "No active setup session" };
   }
 
   try {
-    const agentClient = container.getAgentClient();
-
     // Send a message asking for final output with structured format
     const prompt = `Based on our conversation, please output the final setup files for this project.
 
@@ -168,8 +122,8 @@ Output the setup.md documentation and setup.sh script that will configure this p
 
     let structuredOutput: SetupFilesOutput | undefined;
 
-    await agentClient.sendMessage(
-      session.sessionId,
+    await setupSessionManager.sendMessage(
+      trialId,
       prompt,
       oauthToken,
       (event) => {
@@ -234,7 +188,7 @@ THUNDERDOME_EOF`,
     await container.exec(["chmod", "+x", `${REPO_PATH}/.thunderdome/setup.sh`]);
 
     // End the setup session
-    endSetupSession(trialId);
+    await endSetupSession(trialId);
 
     return { success: true };
   } catch (error) {
@@ -303,23 +257,12 @@ export async function commitSetupFiles(
  * End the setup discovery session
  */
 export async function endSetupSession(trialId: string): Promise<void> {
-  const session = setupSessions.get(trialId);
-  if (session) {
-    const container = getTrialContainer(trialId);
-    if (container) {
-      try {
-        await container.getAgentClient().endSession(session.sessionId);
-      } catch {
-        // Ignore session end errors
-      }
-    }
-    setupSessions.delete(trialId);
-  }
+  await setupSessionManager.endSession(trialId);
 }
 
 /**
  * Check if a setup session exists for a trial
  */
 export function hasSetupSession(trialId: string): boolean {
-  return setupSessions.has(trialId);
+  return setupSessionManager.hasSession(trialId);
 }

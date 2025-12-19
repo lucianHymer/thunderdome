@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentServerClient, createAgentClient } from "./agent-client";
 
 describe("AgentServerClient", () => {
@@ -43,7 +43,7 @@ describe("AgentServerClient", () => {
       expect(result).toBe(true);
       expect(fetch).toHaveBeenCalledWith(
         "http://127.0.0.1:3000/health",
-        expect.objectContaining({ signal: expect.any(AbortSignal) })
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
 
@@ -94,7 +94,7 @@ describe("AgentServerClient", () => {
             cwd: "/workspace",
             oauthToken: "token123",
           }),
-        })
+        }),
       );
 
       expect(result.sessionId).toBe("sess_123");
@@ -114,7 +114,7 @@ describe("AgentServerClient", () => {
           tools: [],
           cwd: "/test",
           oauthToken: "token",
-        })
+        }),
       ).rejects.toThrow("Invalid model");
     });
   });
@@ -146,9 +146,7 @@ describe("AgentServerClient", () => {
         json: () => Promise.resolve({ error: "Session not found" }),
       });
 
-      await expect(client.getSession("nonexistent")).rejects.toThrow(
-        "Session not found"
-      );
+      await expect(client.getSession("nonexistent")).rejects.toThrow("Session not found");
     });
   });
 
@@ -161,10 +159,9 @@ describe("AgentServerClient", () => {
 
       await client.endSession("sess_to_end");
 
-      expect(fetch).toHaveBeenCalledWith(
-        "http://127.0.0.1:3000/sessions/sess_to_end",
-        { method: "DELETE" }
-      );
+      expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:3000/sessions/sess_to_end", {
+        method: "DELETE",
+      });
     });
 
     it("does not throw on 404", async () => {

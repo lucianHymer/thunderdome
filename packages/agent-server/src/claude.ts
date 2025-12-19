@@ -74,25 +74,23 @@ export async function runAgent(opts: RunOptions): Promise<void> {
       }
     }
 
-    // Send done event
-    if (resultMessage) {
-      const result = resultMessage as any;
-      onEvent({
-        event: "done",
-        data: {
-          success: result.subtype === "success",
-          cost: {
-            totalUsd: result.total_cost_usd || 0,
-            inputTokens: result.usage?.input_tokens || 0,
-            outputTokens: result.usage?.output_tokens || 0,
-          },
-          turns: result.num_turns || 0,
-          error: result.is_error ? result.errors?.join(", ") || "Unknown error" : undefined,
-          // Include structured output if present
-          structuredOutput: result.structured_output,
+    // Send done event - ALWAYS send this, even if no result message
+    const result = resultMessage as any;
+    onEvent({
+      event: "done",
+      data: {
+        success: result ? result.subtype === "success" : false,
+        cost: {
+          totalUsd: result?.total_cost_usd || 0,
+          inputTokens: result?.usage?.input_tokens || 0,
+          outputTokens: result?.usage?.output_tokens || 0,
         },
-      });
-    }
+        turns: result?.num_turns || 0,
+        error: result?.is_error ? result.errors?.join(", ") || "Unknown error" : undefined,
+        // Include structured output if present
+        structuredOutput: result?.structured_output,
+      },
+    });
 
     // Mark session as ready for next message
     updateSessionStatus(session.id, "ready");
@@ -101,6 +99,21 @@ export async function runAgent(opts: RunOptions): Promise<void> {
     onEvent({
       event: "error",
       data: {
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+    });
+
+    // Send done event with failure status
+    onEvent({
+      event: "done",
+      data: {
+        success: false,
+        cost: {
+          totalUsd: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+        },
+        turns: 0,
         error: error instanceof Error ? error.message : "Unknown error",
       },
     });
