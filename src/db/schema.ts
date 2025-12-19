@@ -76,7 +76,7 @@ export const trials = sqliteTable("trials", {
   challengePrompt: text("challenge_prompt").notNull(),
   trialType: text("trial_type", { enum: ["GLADIATOR", "LEGION"] }).notNull(),
   status: text("status", {
-    enum: ["PENDING", "PLANNING", "RUNNING", "JUDGING", "COMPLETED", "FAILED"],
+    enum: ["PENDING", "PLANNING", "SETUP_DISCOVERY", "RUNNING", "JUDGING", "COMPLETED", "FAILED"],
   })
     .notNull()
     .default("PENDING"),

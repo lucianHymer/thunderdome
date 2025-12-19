@@ -13,7 +13,7 @@ import { trials } from "@/db/schema";
 import { broadcastTrialUpdate } from "./broadcast";
 
 // Trial status enum matching the database schema
-export type TrialStatus = "PENDING" | "PLANNING" | "RUNNING" | "JUDGING" | "COMPLETED" | "FAILED";
+export type TrialStatus = "PENDING" | "PLANNING" | "SETUP_DISCOVERY" | "RUNNING" | "JUDGING" | "COMPLETED" | "FAILED";
 
 // Trial phase enum - matches the database schema phase column
 export type TrialPhase =
@@ -31,7 +31,7 @@ export type TrialPhase =
 export const STATE_MAPPING: Record<TrialPhase, TrialStatus> = {
   pending: "PENDING",
   lanista_designing: "PLANNING",
-  setup_discovery: "PLANNING",
+  setup_discovery: "SETUP_DISCOVERY",
   battling: "RUNNING",
   arbiter_designing: "JUDGING",
   judging: "JUDGING",

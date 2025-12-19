@@ -1,242 +1,369 @@
 /**
  * Phase Setup Discovery Component
  *
- * Displays the Setup Discovery phase where Claude explores the repository
- * and determines what setup is needed.
+ * Interactive setup discovery using the shared InteractiveSession component.
+ * Same pattern as the old setup-discovery.tsx - parses structured events.
  */
 
 "use client";
 
-import { Check, Loader2, Send } from "lucide-react";
+import { Check, FileCode, FileText, Terminal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PhaseState } from "@/hooks/use-trial-phases";
-import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Markdown } from "@/components/ui/markdown";
-import { ScrollableContainer } from "@/components/ui/scrollable-container";
-import { Textarea } from "@/components/ui/textarea";
-import { ThinkingIndicator } from "../timeline-phase";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-}
+import { InteractiveSession, type QuickAction } from "@/components/ui/interactive-session";
+import type { SessionMessage, SessionStatus } from "@/hooks/use-interactive-session";
+import type { PhaseState } from "@/hooks/use-trial-phases";
 
 interface PhaseSetupDiscoveryProps {
   trialId: string;
   state: PhaseState;
 }
 
-export function PhaseSetupDiscovery({ trialId, state }: PhaseSetupDiscoveryProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [input, setInput] = useState("");
-  const [isFinalized, setIsFinalized] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const currentAssistantMessageRef = useRef<string>("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const hasInitialized = useRef(false);
+interface ToolUse {
+  id: string;
+  name: string;
+  input: unknown;
+}
 
-  // Auto-initialize when state becomes active
-  useEffect(() => {
-    if (state === "active" && !hasInitialized.current && messages.length === 0) {
-      hasInitialized.current = true;
-      void handleInit();
-    }
-  }, [state]);
+/**
+ * Custom message renderer for Setup Discovery style
+ */
+function SetupMessage({ message }: { message: SessionMessage }) {
+  const isUser = message.role === "user";
 
-  // Auto-resize textarea
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "auto";
-      textarea.style.height = Math.min(textarea.scrollHeight, 150) + "px";
-    }
-  }, [input]);
-
-  /**
-   * Send a message to the setup discovery endpoint
-   */
-  const sendMessage = useCallback(
-    async (message: string, history: Message[] = []) => {
-      setIsStreaming(true);
-      setError(null);
-      currentAssistantMessageRef.current = "";
-
-      abortControllerRef.current = new AbortController();
-
-      try {
-        const response = await fetch(`/api/trials/${trialId}/setup`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message,
-            history: history.map((m) => ({ role: m.role, content: m.content })),
-          }),
-          signal: abortControllerRef.current.signal,
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `HTTP ${response.status}`);
-        }
-
-        // Process SSE stream
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-
-        if (!reader) {
-          throw new Error("No response body");
-        }
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split("\n");
-
-            for (const line of lines) {
-              if (!line.startsWith("data: ")) continue;
-
-              const data = line.slice(6);
-              if (data === "[DONE]") continue;
-
-              try {
-                const parsed = JSON.parse(data);
-
-                // Handle text chunks
-                if (parsed.text) {
-                  currentAssistantMessageRef.current += parsed.text;
-
-                  // Update or create assistant message
-                  setMessages((prev) => {
-                    const lastMsg = prev[prev.length - 1];
-                    if (lastMsg && lastMsg.role === "assistant" && !lastMsg.content.endsWith("\n\n")) {
-                      // Update existing partial message
-                      return prev.map((msg, idx) =>
-                        idx === prev.length - 1
-                          ? { ...msg, content: currentAssistantMessageRef.current }
-                          : msg,
-                      );
-                    } else {
-                      // Create new assistant message
-                      return [
-                        ...prev,
-                        {
-                          id: `assistant_${Date.now()}`,
-                          role: "assistant" as const,
-                          content: currentAssistantMessageRef.current,
-                          timestamp: new Date(),
-                        },
-                      ];
-                    }
-                  });
-                }
-
-                // Handle errors
-                if (parsed.type === "error") {
-                  throw new Error(parsed.message || "Unknown error");
-                }
-              } catch (parseError) {
-                // Ignore parse errors for partial data
-              }
-            }
-          }
-        } finally {
-          reader.releaseLock();
-        }
-      } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          setError((err as Error).message);
-        }
-      } finally {
-        setIsStreaming(false);
-      }
-    },
-    [trialId],
+  return (
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`max-w-[80%] rounded-lg p-3 ${
+          isUser ? "bg-cyan-600 text-white" : "bg-muted/50 text-foreground"
+        }`}
+      >
+        {!isUser && (
+          <Badge variant="outline" className="mb-2 text-cyan-400 border-cyan-500/50">
+            Claude
+          </Badge>
+        )}
+        <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+      </div>
+    </div>
   );
+}
+
+export function PhaseSetupDiscovery({ trialId, state }: PhaseSetupDiscoveryProps) {
+  const [messages, setMessages] = useState<SessionMessage[]>([]);
+  const [status, setStatus] = useState<SessionStatus>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [isFinalized, setIsFinalized] = useState(false);
+
+  const initRef = useRef(false);
+  const currentAssistantContentRef = useRef("");
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   /**
-   * Initialize the session
+   * Process SSE stream - same pattern as old setup-discovery
    */
-  const handleInit = useCallback(async () => {
-    await sendMessage("__INIT__", []);
-  }, [sendMessage]);
+  const processStream = useCallback(async (response: Response) => {
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+
+          const data = line.slice(6);
+          if (data === "[DONE]") continue;
+
+          try {
+            const event = JSON.parse(data);
+            handleStreamEvent(event);
+          } catch {
+            // Ignore parse errors for partial data
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }, []);
 
   /**
-   * Send user message
+   * Handle individual stream events - same as old setup-discovery
    */
-  const handleSendMessage = useCallback(async () => {
-    if (!input.trim() || isStreaming) return;
+  const handleStreamEvent = useCallback((event: { type: string; content?: { text?: string; toolUses?: ToolUse[]; partial?: boolean }; data?: { tool?: string }; toolUses?: ToolUse[] }) => {
+    switch (event.type) {
+      case "assistant": {
+        const { text, toolUses, partial } = event.content || {};
 
-    const userMessage: Message = {
-      id: `user_${Date.now()}`,
-      role: "user",
-      content: input.trim(),
-      timestamp: new Date(),
-    };
+        if (partial && text) {
+          // Accumulate partial text
+          currentAssistantContentRef.current += text;
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
+          setMessages((prev) => {
+            const existingIdx = prev.findIndex((m) => m.role === "assistant" && m.isPartial);
 
-    await sendMessage(userMessage.content, messages);
-  }, [input, isStreaming, messages, sendMessage]);
+            if (existingIdx >= 0) {
+              const updated = [...prev];
+              updated[existingIdx] = {
+                ...updated[existingIdx],
+                content: currentAssistantContentRef.current,
+              };
+              return updated;
+            } else {
+              return [
+                ...prev,
+                {
+                  id: `assistant_${Date.now()}`,
+                  role: "assistant",
+                  content: currentAssistantContentRef.current,
+                  isPartial: true,
+                  timestamp: new Date(),
+                },
+              ];
+            }
+          });
+        } else if (text || toolUses?.length) {
+          // Complete assistant message
+          currentAssistantContentRef.current = "";
+
+          setMessages((prev) => {
+            const filtered = prev.filter((m) => !m.isPartial);
+            return [
+              ...filtered,
+              {
+                id: `assistant_${Date.now()}`,
+                role: "assistant",
+                content: text || "",
+                toolUses,
+                isPartial: false,
+                timestamp: new Date(),
+              },
+            ];
+          });
+        }
+        break;
+      }
+
+      case "tool_use": {
+        // Tool use event - could show in UI if needed
+        break;
+      }
+
+      case "turn_complete": {
+        // Turn is done, finalize the last message
+        setStatus("waiting");
+
+        // Finalize partial message if exists
+        setMessages((prev) => {
+          const lastIdx = prev.findIndex((m) => m.isPartial);
+          if (lastIdx >= 0) {
+            const updated = [...prev];
+            updated[lastIdx] = {
+              ...updated[lastIdx],
+              isPartial: false,
+              toolUses: event.toolUses,
+            };
+            return updated;
+          }
+          return prev;
+        });
+        break;
+      }
+
+      case "error":
+        setError((event as { message?: string }).message || "Unknown error");
+        setStatus("error");
+        break;
+    }
+  }, []);
 
   /**
-   * Finalize setup
+   * Initialize conversation
    */
-  const handleFinalize = useCallback(async () => {
-    setIsStreaming(true);
-    setError(null);
+  const initializeConversation = useCallback(async () => {
+    if (initRef.current) return;
+    initRef.current = true;
+
+    setStatus("streaming");
+    currentAssistantContentRef.current = "";
+    abortControllerRef.current = new AbortController();
 
     try {
       const response = await fetch(`/api/trials/${trialId}/setup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "__INIT__" }),
+        signal: abortControllerRef.current.signal,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to initialize setup discovery");
+      }
+
+      await processStream(response);
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        setStatus("idle");
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to connect");
+        setStatus("error");
+      }
+    }
+  }, [trialId, processStream]);
+
+  /**
+   * Send a message
+   */
+  const sendMessage = useCallback(async (content: string) => {
+    if (!content.trim() || status === "streaming") return;
+
+    // Add user message
+    const userMessage: SessionMessage = {
+      id: `user_${Date.now()}`,
+      role: "user",
+      content: content.trim(),
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+    setStatus("streaming");
+    setError(null);
+    currentAssistantContentRef.current = "";
+
+    try {
+      // Build history from messages
+      const history = messages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+
+      const response = await fetch(`/api/trials/${trialId}/setup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: content.trim(),
+          history,
+        }),
+        signal: abortControllerRef.current?.signal,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to send message");
+      }
+
+      await processStream(response);
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setError(err instanceof Error ? err.message : "Failed to get response");
+        setStatus("error");
+      }
+    }
+  }, [trialId, messages, status, processStream]);
+
+  /**
+   * Finalize setup - extract and commit files
+   */
+  const handleFinalize = useCallback(async () => {
+    setStatus("streaming");
+    setError(null);
+
+    try {
+      const history = messages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+
+      const response = await fetch(`/api/trials/${trialId}/setup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: "__FINALIZE__",
-          history: messages.map((m) => ({ role: m.role, content: m.content })),
+          history,
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        throw new Error(errorData.error || "Failed to finalize setup");
       }
 
       const result = await response.json();
       if (result.success) {
         setIsFinalized(true);
+        setStatus("complete");
       } else {
         throw new Error(result.error || "Failed to finalize setup");
       }
     } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setIsStreaming(false);
+      setError(err instanceof Error ? err.message : "Failed to finalize");
+      setStatus("error");
     }
   }, [trialId, messages]);
 
   /**
-   * Handle keyboard shortcuts
+   * Stop streaming
    */
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        void handleSendMessage();
-      }
+  const handleStop = useCallback(() => {
+    abortControllerRef.current?.abort();
+    setStatus("waiting");
+  }, []);
+
+  // Initialize when state becomes active
+  useEffect(() => {
+    if (state === "active" && !initRef.current) {
+      initializeConversation();
+    }
+  }, [state, initializeConversation]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  // Quick actions
+  const quickActions: QuickAction[] = [
+    {
+      label: "Check Makefile",
+      message: "Check if there's a Makefile and what targets it has",
+      icon: <FileCode className="h-3 w-3" />,
     },
-    [handleSendMessage],
-  );
+    {
+      label: "Check CI",
+      message: "Look at the CI/CD configuration to understand how tests are run",
+      icon: <Terminal className="h-3 w-3" />,
+    },
+    {
+      label: "Generate Files",
+      message: "Please generate the setup.md and setup.sh files now based on what you've learned",
+      icon: <FileText className="h-3 w-3" />,
+    },
+  ];
 
   if (state === "pending") {
     return <div className="text-muted-foreground text-sm">Waiting for repository setup...</div>;
+  }
+
+  if (state === "complete" || isFinalized) {
+    return (
+      <div className="flex items-center gap-2 text-green-400">
+        <Check className="h-4 w-4" />
+        <span className="text-sm font-medium">Setup files committed to repository</span>
+      </div>
+    );
   }
 
   if (state === "error") {
@@ -252,144 +379,42 @@ export function PhaseSetupDiscovery({ trialId, state }: PhaseSetupDiscoveryProps
     );
   }
 
-  if (state === "complete" || isFinalized) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 text-green-400">
-          <Check className="h-4 w-4" />
-          <span className="text-sm font-medium">Setup files committed to repository</span>
-        </div>
-        {messages.length > 0 && (
-          <div className="bg-cyan-950/20 border border-cyan-500/20 rounded-lg p-4">
-            <h4 className="text-sm font-medium text-cyan-400 mb-2">Discovery Summary</h4>
-            <ScrollableContainer className="max-h-64 pr-2">
-              <div className="space-y-3">
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={cn(
-                      "text-sm",
-                      msg.role === "user" ? "text-foreground font-medium" : "text-muted-foreground",
-                    )}
-                  >
-                    <div className="text-xs text-cyan-400 mb-1">
-                      {msg.role === "user" ? "You" : "Claude"}
-                    </div>
-                    {msg.role === "user" ? (
-                      <span className="whitespace-pre-wrap">{msg.content}</span>
-                    ) : (
-                      <Markdown>{msg.content}</Markdown>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </ScrollableContainer>
-          </div>
-        )}
-      </div>
-    );
-  }
-
   // Active state
   return (
     <div className="space-y-4">
-      {/* Header */}
+      {/* Info header */}
       <div className="bg-cyan-950/20 border border-cyan-500/20 rounded-lg p-3">
         <p className="text-sm text-muted-foreground">
-          Claude is exploring your repository to determine what setup is needed. You can guide the
-          discovery process or let Claude explore on its own.
+          Claude is exploring your repository to create setup scripts. Guide the discovery or let it explore.
         </p>
       </div>
 
-      {/* Messages */}
-      <div className="border border-cyan-500/30 rounded-lg bg-black/20">
-        <ScrollableContainer className="max-h-[400px] p-4">
-          <div className="space-y-4">
-            {messages.length === 0 && isStreaming && (
-              <ThinkingIndicator message="Initializing setup discovery" colorScheme="cyan" />
-            )}
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}
-              >
-                <div
-                  className={cn(
-                    "max-w-[85%] rounded-lg p-3",
-                    msg.role === "user"
-                      ? "bg-cyan-600 text-white"
-                      : "bg-muted/50 text-foreground",
-                  )}
-                >
-                  {msg.role === "assistant" && (
-                    <div className="text-xs font-medium mb-1 text-cyan-400">Claude</div>
-                  )}
-                  <div className="text-sm">
-                    {msg.role === "user" ? (
-                      <span className="whitespace-pre-wrap">{msg.content}</span>
-                    ) : (
-                      <Markdown>{msg.content}</Markdown>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {isStreaming && messages.length > 0 && (
-              <div className="flex justify-start">
-                <div className="rounded-lg p-3 bg-muted/50">
-                  <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
-                </div>
-              </div>
-            )}
-          </div>
-        </ScrollableContainer>
-      </div>
+      {/* Interactive Session */}
+      <InteractiveSession
+        messages={messages}
+        status={status}
+        error={error}
+        onSend={sendMessage}
+        onStop={handleStop}
+        placeholder="Guide the setup discovery..."
+        variant="orange"
+        assistantLabel="Claude"
+        quickActions={quickActions}
+        showToolUse
+        renderMessage={(message) => <SetupMessage key={message.id} message={message} />}
+        className="h-[400px]"
+      />
 
-      {/* Error Display */}
-      {error && (
-        <div className="bg-red-950/30 border border-red-500/50 rounded-lg p-3">
-          <p className="text-sm text-red-400">{error}</p>
-        </div>
+      {/* Finalize Button */}
+      {messages.length > 0 && status === "waiting" && (
+        <Button
+          onClick={handleFinalize}
+          className="w-full bg-green-600 hover:bg-green-700"
+        >
+          <Check className="h-4 w-4 mr-2" />
+          Finalize Setup
+        </Button>
       )}
-
-      {/* Input Area */}
-      <div className="flex flex-col gap-2">
-        <div className="flex gap-2 items-end">
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask Claude about the setup or provide guidance..."
-            disabled={isStreaming}
-            className={cn(
-              "flex-1 min-h-[40px] max-h-[150px] resize-none bg-black/30",
-              "border-cyan-500/50 focus:border-cyan-400",
-            )}
-            rows={1}
-          />
-          <Button
-            onClick={handleSendMessage}
-            disabled={!input.trim() || isStreaming}
-            size="icon"
-            className="shrink-0 bg-cyan-600 hover:bg-cyan-700"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Finalize Button */}
-        {messages.length > 0 && !isStreaming && (
-          <Button
-            onClick={handleFinalize}
-            disabled={isStreaming}
-            className="w-full bg-green-600 hover:bg-green-700"
-          >
-            <Check className="h-4 w-4 mr-2" />
-            Finalize Setup
-          </Button>
-        )}
-      </div>
     </div>
   );
 }

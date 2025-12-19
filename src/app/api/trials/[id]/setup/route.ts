@@ -22,7 +22,6 @@ import {
   finalizeSetup,
   sendSetupMessage,
 } from "@/lib/setup/runner";
-import { streamTextToSSE } from "@/lib/streaming";
 import { broadcastTrialUpdate } from "@/lib/trial/broadcast";
 import { continueAfterSetup } from "@/lib/trial/code-battle/orchestrator";
 
@@ -157,12 +156,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       conversationPrompt = "";
     }
 
-    // Stream response
+    // Stream response - send events in same format as old setup-discovery expected
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          let fullResponse = "";
+          const toolUses: Array<{ id: string; name: string; input: unknown }> = [];
 
           const result = await sendSetupMessage(
             trialId,
@@ -170,24 +169,42 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             trial.repoUrl!,
             claudeToken,
             async (event) => {
-              // Handle assistant messages - stream text
+              // Handle assistant messages - stream as partial text
               if (event.event === "assistant") {
                 const data = event.data as { content?: string };
                 if (data.content) {
-                  fullResponse += data.content;
-                  await streamTextToSSE(controller, encoder, data.content, 10);
+                  const eventData = JSON.stringify({
+                    type: "assistant",
+                    content: { text: data.content, partial: true },
+                  });
+                  controller.enqueue(encoder.encode(`data: ${eventData}\n\n`));
                 }
               }
 
-              // Handle tool use events - show what the agent is doing
+              // Handle tool use events - track them
               if (event.event === "tool_use") {
-                const data = event.data as { tool?: string; input?: unknown };
+                const data = event.data as { id?: string; tool?: string; input?: unknown };
                 if (data.tool) {
-                  const toolMsg = `\n[Using ${data.tool}...]\n`;
-                  controller.enqueue(
-                    encoder.encode(`data: ${JSON.stringify({ text: toolMsg })}\n\n`),
-                  );
+                  toolUses.push({
+                    id: data.id || `tool_${Date.now()}`,
+                    name: data.tool,
+                    input: data.input,
+                  });
+                  const eventData = JSON.stringify({
+                    type: "tool_use",
+                    data: { tool: data.tool, input: data.input },
+                  });
+                  controller.enqueue(encoder.encode(`data: ${eventData}\n\n`));
                 }
+              }
+
+              // Handle done event
+              if (event.event === "done") {
+                const eventData = JSON.stringify({
+                  type: "turn_complete",
+                  toolUses: toolUses.length > 0 ? toolUses : undefined,
+                });
+                controller.enqueue(encoder.encode(`data: ${eventData}\n\n`));
               }
             },
           );
