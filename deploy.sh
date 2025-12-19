@@ -37,9 +37,27 @@ build_agent_server() {
     echo "✅ agent-server image built"
 }
 
+push_agent_server_image() {
+    echo "📤 Pushing agent-server image to prod..."
+    docker save "$AGENT_IMAGE" | gzip | ssh $SERVER "gunzip | docker load"
+    echo "✅ agent-server image deployed to prod"
+}
+
 echo "🐳 Checking Docker images..."
+NEEDS_PUSH=false
 if check_agent_server_image; then
     build_agent_server
+    NEEDS_PUSH=true
+fi
+
+# Also check if prod has the image
+if ! ssh $SERVER "docker image inspect $AGENT_IMAGE >/dev/null 2>&1"; then
+    echo "📦 Image not found on prod server"
+    NEEDS_PUSH=true
+fi
+
+if [ "$NEEDS_PUSH" = true ]; then
+    push_agent_server_image
 fi
 
 echo "🔨 Building Next.js..."
