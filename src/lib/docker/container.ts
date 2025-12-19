@@ -74,6 +74,8 @@ export async function createTrialContainer(config: TrialContainerConfig): Promis
       ReadonlyRootfs: false,
       AutoRemove: false,
       PublishAllPorts: true,
+      // Use host cgroup namespace to avoid permission issues (types outdated)
+      ...({ CgroupnsMode: "host" } as Record<string, unknown>),
     },
     Labels: {
       "thunderdome.trial-id": trialId,
