@@ -60,7 +60,6 @@ export async function createTrialContainer(config: TrialContainerConfig): Promis
     AttachStdout: true,
     AttachStderr: true,
     OpenStdin: false,
-    WorkingDir: "/workspace",
     ExposedPorts: {
       [`${AGENT_SERVER_PORT}/tcp`]: {},
     },
