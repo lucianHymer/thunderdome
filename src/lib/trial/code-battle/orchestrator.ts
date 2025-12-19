@@ -92,10 +92,14 @@ async function cloneRepository(
       `git clone --depth 1 "${authUrl}" /workspace/repo 2>&1`,
     ]);
 
+    // Don't leak token in output
+    const safeOutput = (stdout || stderr).replace(gitToken, "***");
     if (onOutput) {
-      // Don't leak token in output
-      const safeOutput = (stdout || stderr).replace(gitToken, "***");
       onOutput(safeOutput);
+    }
+
+    if (exitCode !== 0) {
+      console.error(`[Trial ${trialId}] Git clone failed (exit ${exitCode}):`, safeOutput);
     }
 
     if (exitCode === 0) {
