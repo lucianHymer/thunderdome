@@ -39,7 +39,7 @@ build_agent_server() {
 
 push_agent_server_image() {
     echo "📤 Pushing agent-server image to prod..."
-    docker save "$AGENT_IMAGE" | gzip | ssh $SERVER "gunzip | docker load"
+    docker save "$AGENT_IMAGE" | gzip | ssh $SERVER "gunzip | sudo podman load"
     echo "✅ agent-server image deployed to prod"
 }
 
@@ -50,14 +50,14 @@ if check_agent_server_image; then
     NEEDS_PUSH=true
 fi
 
-# Check if prod has the image and if it matches local
-if ! ssh $SERVER "docker image inspect $AGENT_IMAGE >/dev/null 2>&1"; then
+# Check if prod has the image and if it matches local (using Podman on prod)
+if ! ssh $SERVER "sudo podman image inspect $AGENT_IMAGE >/dev/null 2>&1"; then
     echo "📦 Image not found on prod server"
     NEEDS_PUSH=true
 else
     # Compare image IDs to detect version mismatch
     LOCAL_ID=$(docker image inspect "$AGENT_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "none")
-    REMOTE_ID=$(ssh $SERVER "docker image inspect $AGENT_IMAGE --format '{{.Id}}'" 2>/dev/null || echo "missing")
+    REMOTE_ID=$(ssh $SERVER "sudo podman image inspect $AGENT_IMAGE --format '{{.Id}}'" 2>/dev/null || echo "missing")
     if [ "$LOCAL_ID" != "$REMOTE_ID" ]; then
         echo "📦 Prod image is stale (local: ${LOCAL_ID:7:12}, prod: ${REMOTE_ID:7:12})"
         NEEDS_PUSH=true
