@@ -2,12 +2,15 @@ import Docker from "dockerode";
 
 let dockerClient: Docker | null = null;
 
+// Podman socket on prod, Docker socket locally
+const CONTAINER_SOCKET = process.env.CONTAINER_SOCKET || "/var/run/docker.sock";
+
 /**
- * Get the Docker client singleton instance
+ * Get the Docker/Podman client singleton instance
  */
 export function getDockerClient(): Docker {
   if (!dockerClient) {
-    dockerClient = new Docker();
+    dockerClient = new Docker({ socketPath: CONTAINER_SOCKET });
   }
   return dockerClient;
 }

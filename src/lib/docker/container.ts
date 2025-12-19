@@ -64,7 +64,7 @@ export async function createTrialContainer(config: TrialContainerConfig): Promis
       [`${AGENT_SERVER_PORT}/tcp`]: {},
     },
     HostConfig: {
-      // Resource limits disabled - cgroup controllers not available on Hetzner VPS
+      // Resource limits disabled - Podman on Hetzner VPS doesn't support cgroup limits
       // Memory: memoryLimit,
       // MemorySwap: -1,
       // NanoCpus: cpuLimit * 1e9,
@@ -74,8 +74,6 @@ export async function createTrialContainer(config: TrialContainerConfig): Promis
       ReadonlyRootfs: false,
       AutoRemove: false,
       PublishAllPorts: true,
-      // Use host cgroup namespace to avoid permission issues (types outdated)
-      ...({ CgroupnsMode: "host" } as Record<string, unknown>),
     },
     Labels: {
       "thunderdome.trial-id": trialId,
