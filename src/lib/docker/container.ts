@@ -66,7 +66,7 @@ export async function createTrialContainer(config: TrialContainerConfig): Promis
     },
     HostConfig: {
       Memory: memoryLimit,
-      MemorySwap: memoryLimit,
+      MemorySwap: -1, // Disable swap limit (cgroup swap controller not available on Hetzner VPS)
       NanoCpus: cpuLimit * 1e9,
       SecurityOpt: ["no-new-privileges"],
       CapDrop: ["ALL"],
