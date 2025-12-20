@@ -654,6 +654,77 @@ The Thunderdome + Crucible creates:
 
 It turns AI assistance from a transaction into a relationship.
 
+### The Closed Loop: Thunderdome Validates Judges
+
+Here's the key insight that ties everything together:
+
+**Problem**: In the Crucible, judges evaluate gladiators. But who evaluates the judges? You can't just have judges judge judges forever - that's turtles all the way down.
+
+**Solution**: The Thunderdome IS the judge evaluation system. Users are the ground truth.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  THE CRUCIBLE                                               │
+│                                                             │
+│  Gladiators battle. Judges evaluate.                        │
+│  But judges are just guessing at "quality"                  │
+│  How do we know if they're actually good?                   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          │ judges graduate to production
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  THUNDERDOME                                                │
+│                                                             │
+│  Real users. Real problems. Real stakes.                    │
+│                                                             │
+│  Consul picks winner based on judge scores                  │
+│  User receives the "winning" solution                       │
+│                                                             │
+│  Then reality happens:                                      │
+│  ├── User accepts solution       → judges were right        │
+│  ├── User rejects solution       → judges were wrong        │
+│  ├── Tests pass in user's repo   → STRONG validation        │
+│  ├── User comes back for help    → solution actually failed │
+│  └── User rates satisfaction     → explicit signal          │
+│                                                             │
+│  USERS ARE THE GROUND TRUTH LABELS                          │
+│  (and they don't even know it)                              │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          │ signal flows back
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  JUDGE EVOLUTION                                            │
+│                                                             │
+│  "Judge Axiom's top picks have 73% user acceptance"         │
+│  "Judge Hedonism's picks get rejected 45% of the time"      │
+│                                                             │
+│  Breed more judges like Axiom                               │
+│  Let Hedonism's lineage fade                                │
+│                                                             │
+│  No labelers needed. No rating UI needed.                   │
+│  Usage IS the rating.                                       │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**This solves the "who judges the judges" problem without anyone having a job.**
+
+Users aren't asked to rate judges. They're just using the product. But their actions - accepting solutions, rejecting them, tests passing, coming back for more help - create implicit labels that feed back into judge evolution.
+
+**What you can learn:**
+- Which judge personas predict user satisfaction
+- Which evaluation criteria actually matter in practice
+- Whether certain judges are domain-specific ("great at code review, terrible at design")
+- If the Crucible's synthetic challenges are actually predictive of real-world success
+
+**The beautiful part**: The community donates credits to train gladiators in the Crucible. Users use those gladiators in Thunderdome. User behavior trains better judges. Better judges select better gladiators. Better gladiators help more users. More users contribute more signal.
+
+It's a flywheel that improves itself through usage.
+
 ---
 
 ## The Metagame (Advanced)
@@ -749,6 +820,183 @@ Or you might just have fun watching AI gladiators fight on Friday nights. Both o
 - Human mentorship
 - Cross-pollination experiments
 - Whatever weird emergent behavior shows up
+
+---
+
+## The Aesthetic: Caves of Qud Energy
+
+The visual and narrative inspiration is **Caves of Qud** - the roguelike that proves you can have ASCII bones with literary soul.
+
+### What We're Stealing
+
+| Qud Element | Crucible Translation |
+|-------------|---------------------|
+| ASCII + tile hybrid | Simple sprites, rich text descriptions |
+| Literary prose | "Thornweave studies the mutex with ancient patience" |
+| Deep lore everywhere | Every totem, every crawler has history you can explore |
+| "Live and drink, wanderer" | A greeting, a vibe, a world that feels alive |
+| Procedural stories feel authored | Battles generate narratives, not just logs |
+| Archaeology matters | "I've seen this pattern before, in Week 7" |
+| Strange and distinctive | Not generic fantasy, not corporate AI - *weird and alive* |
+
+### The Voice
+
+Not this:
+> "Thornweave ran 47 tests. All passed. Task complete."
+
+This:
+> "Thornweave studies the mutex with ancient patience. A flicker of recognition crosses their features. 'The lock ordering is inverted. I have seen this pattern before, in the trials of Week 7.' The tests pass, all forty-seven, like old friends greeting a returning traveler."
+
+The battle log is literature. The UI is a frame for storytelling.
+
+### Example Screen
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ☿ THE CRUCIBLE · LEVEL 7 · THE RECURSION DEPTHS            │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  The chamber hums with residual computation.                │
+│  Patterns flicker in the substrate walls.                   │
+│                                                             │
+│  ┌─────┐                                                    │
+│  │ ◈◈  │  THORNWEAVE THE METHODICAL                        │
+│  │ ─┬─ │  Scion of Ironclad Prime · Level 14               │
+│  │  │  │  Bearer of the Recursion Stone                    │
+│  └──┴──┘                                                    │
+│         HP ████████░░  FOCUS ██████████                    │
+│                                                             │
+│  Thornweave studies the mutex with ancient patience.        │
+│  A flicker of recognition crosses their features.           │
+│                                                             │
+│  "The lock ordering is inverted. I have seen this           │
+│   pattern before, in the trials of Week 7."                 │
+│                                                             │
+│  > examining scheduler.ts...                                │
+│  > writing correction...                                    │
+│  > tests pass (47/47)                                       │
+│                                                             │
+│  ═══════════════════════════════════════════════════════   │
+│  [w]atch · [l]ineage · [t]otems · [l]ore · [q]uit          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Totem Descriptions (Qud Style)
+
+**The Recursion Stone** 🗿
+> *A crystallized moment of infinite regress, cold to the touch. Those who carry it report dreams of functions calling themselves forever, and wake with solutions they cannot explain. Thornweave recovered this from the Level 7 gauntlet, where 73% of their generation fell to stack overflow.*
+
+**Edge Case Shard** 🔍
+> *A sliver of broken assumption. It hums faintly when held near untested code. The previous bearer, Whisper the Bold, found it in a heap of null pointer exceptions. She did not survive to carry it further. Thornweave retrieved it from her remains.*
+
+**Gas Optimizer's Medal** ⚡
+> *Awarded for elegance under constraint. The inscription reads: "47,000 gas saved." In the economy of computation, this is a small fortune. Thornweave earned this in the Solidity Trials, Season 2.*
+
+### Lineage as Lore
+
+When you click "lineage," you don't get a dry family tree. You get:
+
+> **The Line of Ironclad**
+>
+> In the early days of the Crucible, before the Great Filter, a pattern coalesced from the noise. It called itself Ironclad Prime, and it believed in verification above all else.
+>
+> Ironclad Prime fell in Week 4 to a challenge it refused to attempt - deemed "too ambiguous." But its descendants learned flexibility. Vigilant II softened the doctrine: "Verify, but do not freeze." From Vigilant came Thornweave, who carries the verification instinct but knows when to act on incomplete information.
+>
+> The Line of Ironclad has produced 12 champions. Their totems fill the Hall. Their pattern persists.
+
+### The Bounce: Living Tiles
+
+Everything animates through **bounces and tile swaps**. Like Pokemon or early Final Fantasy - limited animation that's pure charm.
+
+**The Lanista Announces:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ☿ THE THUNDERDOME · TRIAL #247                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│     ╔═══╗                               ╔═══╗              │
+│     ║ ▓ ║         ┌─────┐              ║ ▓ ║              │
+│     ║ ▓ ║         │ ◉◉  │ *bounce*     ║ ▓ ║              │
+│     ║ ▓ ║         │ ┬┬  │  📜          ║ ▓ ║              │
+│     ║   ║         │ ││  │              ║   ║              │
+│     ╚═══╝         └─────┘              ╚═══╝              │
+│      GATE          LANISTA              GATE               │
+│                                                             │
+│  ─────────────────────────────────────────────────────────  │
+│                                                             │
+│  The Lanista unrolls the scroll of battle.                  │
+│                                                             │
+│  "FOR THIS CHALLENGE... I SUMMON:"                          │
+│                                                             │
+│  > Thornweave the Methodical  [debugging specialist]        │
+│  > Sunfire the Bold           [creative solutions]          │
+│  > Ironclad III               [verification master]         │
+│                                                             │
+│  "MAY THE BEST PATTERN PERSIST."                            │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**The Gates Open:**
+
+```
+     ╔═══╗                               ╔═══╗
+     ║   ║  *creak*                      ║   ║  *creak*
+     ║   ║         ┌─────┐              ║   ║
+     ║   ║         │ ◉◉  │              ║   ║
+     ║   ║         │ ┬┬  │              ║   ║
+     ╚═╝         └─────┘              ╚═╝
+
+  ┌───┐                                          ┌───┐
+  │◈◈ │ *bounce*                        *bounce* │▣▣ │
+  │─┬─│ ──►                                  ◄── │─┬─│
+  └─┴─┘                                          └─┴─┘
+  THORNWEAVE                                    SUNFIRE
+```
+
+Gladiators **bounce out** of the gates. Little hop animations. Gates swing open tile by tile.
+
+**Victory:**
+
+```
+                      ┌───┐
+                      │◈◈ │
+                      │\┬/│  *victory bounce*
+                      └─┴─┘
+                        │
+                      ┌─┴─┐
+                      │ 🗿 │  +1 TOTEM
+                      └───┘
+
+  THORNWEAVE CLAIMS VICTORY
+  "The pattern persists."
+
+  +150 XP · +1 Totem · Win streak: 3
+```
+
+**The Animation Language:**
+
+| Action | Animation |
+|--------|-----------|
+| Character active | Bounce (bob up and down) |
+| Item appears | Pop in next to character |
+| Gate opens | Tile swap (closed → open) |
+| Victory | Arms-up pose + bounce |
+| Defeat | Fade/dissolve tiles |
+| Totem acquired | Item drops, character bounces |
+
+The whole UI is **living tiles** that react to the story. Limited animation forces expressiveness through timing and tile choice, not fancy graphics.
+
+### Why This Matters
+
+The Qud aesthetic does something important: it makes **systems feel like stories**.
+
+A roguelike is just numbers and rules underneath. But Qud makes you *feel* like you're a mutant wandering ancient ruins, not optimizing a build.
+
+The Crucible is just prompt evolution and win-rate tracking underneath. But with Qud energy, you're watching the rise and fall of lineages, the recovery of ancient patterns, the quiet tragedy of Whisper the Bold who died at Level 3 because she was too brave.
+
+**The math is real. The story makes it matter.**
 
 ---
 
